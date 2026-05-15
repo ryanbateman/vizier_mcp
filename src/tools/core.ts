@@ -2,6 +2,17 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getClient } from "../dfhack/client.js";
 
+function paginate<T>(items: T[], offset: number, limit: number): { total: number; offset: number; limit: number; items: T[] } {
+  const start = Math.min(offset, items.length);
+  const end = Math.min(start + limit, items.length);
+  return {
+    total: items.length,
+    offset: start,
+    limit,
+    items: items.slice(start, end),
+  };
+}
+
 export function registerCoreTools(server: McpServer) {
   server.tool("list_enums", "List all enum definitions used in game data (material flags, unit flags, labors, skills, professions, etc.)", {}, async () => {
     try {
@@ -18,20 +29,36 @@ export function registerCoreTools(server: McpServer) {
     }
   });
 
-  server.tool("list_job_skills", "List all job skills, professions, and unit labors with their attributes", {}, async () => {
-    try {
-      const client = await getClient();
-      const result = await client.call("ListJobSkills");
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-      };
-    } catch (err: any) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${err.message}` }],
-        isError: true,
-      };
+  server.tool(
+    "list_job_skills",
+    "List all job skills, professions, and unit labors with their attributes",
+    {
+      type: z.enum(["skill", "profession", "labor"]).optional().describe("Return only this type (paginates). If omitted, returns all three types unpaginated."),
+      offset: z.number().int().min(0).optional().describe("Pagination offset (default: 0)"),
+      limit: z.number().int().min(1).max(200).optional().describe("Page size (default: 100)"),
+    },
+    async ({ type, offset, limit }) => {
+      try {
+        const client = await getClient();
+        const result = await client.call("ListJobSkills");
+        if (type) {
+          const values = (result as any)[type] ?? [];
+          const page = paginate(values, offset ?? 0, limit ?? 100);
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(page, null, 2) }],
+          };
+        }
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${err.message}` }],
+          isError: true,
+        };
+      }
     }
-  });
+  );
 
   server.tool(
     "list_materials",
@@ -41,8 +68,10 @@ export function registerCoreTools(server: McpServer) {
       inorganic: z.boolean().optional().describe("Include inorganic materials like stone, metal, gem (default: false)"),
       creatures: z.boolean().optional().describe("Include creature materials like leather, bone, silk (default: false)"),
       plants: z.boolean().optional().describe("Include plant materials like wood, cloth (default: false)"),
+      offset: z.number().int().min(0).optional().describe("Pagination offset (default: 0)"),
+      limit: z.number().int().min(1).max(200).optional().describe("Page size (default: 100)"),
     },
-    async ({ builtin, inorganic, creatures, plants }) => {
+    async ({ builtin, inorganic, creatures, plants, offset, limit }) => {
       try {
         const client = await getClient();
         const input: Record<string, unknown> = {};
@@ -54,8 +83,10 @@ export function registerCoreTools(server: McpServer) {
           input["inorganic"] = true;
         }
         const result = await client.call("ListMaterials", input);
+        const values = (result as any).value ?? [];
+        const page = paginate(values, offset ?? 0, limit ?? 100);
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+          content: [{ type: "text" as const, text: JSON.stringify(page, null, 2) }],
         };
       } catch (err: any) {
         return {
@@ -82,8 +113,10 @@ export function registerCoreTools(server: McpServer) {
         labors: z.boolean().optional().describe("Include enabled labors for each unit"),
         miscTraits: z.boolean().optional().describe("Include misc traits data for each unit"),
       }).optional().describe("Data mask controlling which additional unit fields are returned"),
+      offset: z.number().int().min(0).optional().describe("Pagination offset (default: 0)"),
+      limit: z.number().int().min(1).max(200).optional().describe("Page size (default: 100)"),
     },
-    async ({ scan_all, race, civ_id, dead, alive, sane, mask }) => {
+    async ({ scan_all, race, civ_id, dead, alive, sane, mask, offset, limit }) => {
       try {
         const client = await getClient();
         const input: Record<string, unknown> = {};
@@ -99,8 +132,10 @@ export function registerCoreTools(server: McpServer) {
           input["scanAll"] = true;
         }
         const result = await client.call("ListUnits", input);
+        const values = (result as any).value ?? [];
+        const page = paginate(values, offset ?? 0, limit ?? 100);
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+          content: [{ type: "text" as const, text: JSON.stringify(page, null, 2) }],
         };
       } catch (err: any) {
         return {
