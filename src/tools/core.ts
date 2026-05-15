@@ -2,6 +2,60 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getClient } from "../dfhack/client.js";
 
+type LookupTables = {
+  profession: Map<number, { key: string; caption: string }>;
+  skill: Map<number, { key: string; caption: string; captionNoun: string }>;
+  labor: Map<number, { key: string; caption: string }>;
+};
+
+let cachedLookups: LookupTables | null = null;
+
+async function ensureLookups(): Promise<LookupTables> {
+  if (cachedLookups) return cachedLookups;
+  const client = await getClient();
+  const result = await client.call("ListJobSkills");
+
+  const profession = new Map<number, { key: string; caption: string }>();
+  for (const p of (result as any).profession ?? []) {
+    profession.set(p.id, { key: p.key, caption: p.caption });
+  }
+
+  const skill = new Map<number, { key: string; caption: string; captionNoun: string }>();
+  for (const s of (result as any).skill ?? []) {
+    skill.set(s.id, { key: s.key, caption: s.caption, captionNoun: s.captionNoun });
+  }
+
+  const labor = new Map<number, { key: string; caption: string }>();
+  for (const l of (result as any).labor ?? []) {
+    labor.set(l.id, { key: l.key, caption: l.caption });
+  }
+
+  cachedLookups = { profession, skill, labor };
+  return cachedLookups;
+}
+
+function resolveUnitNames(unit: any, lookups: LookupTables) {
+  if (unit.profession !== undefined) {
+    const p = lookups.profession.get(unit.profession);
+    if (p) unit.professionName = p.caption;
+  }
+  if (unit.skills) {
+    for (const s of unit.skills) {
+      const def = lookups.skill.get(s.id);
+      if (def) {
+        s.name = def.caption;
+        s.nameNoun = def.captionNoun;
+      }
+    }
+  }
+  if (unit.labors) {
+    unit.labors = unit.labors.map((id: number) => {
+      const def = lookups.labor.get(id);
+      return { id, name: def?.caption ?? `Labor ${id}` };
+    });
+  }
+}
+
 function paginate<T>(items: T[], offset: number, limit: number): { total: number; offset: number; limit: number; items: T[] } {
   const start = Math.min(offset, items.length);
   const end = Math.min(start + limit, items.length);
@@ -143,6 +197,10 @@ export function registerCoreTools(server: McpServer) {
                     n?.englishName?.toLowerCase().includes(lower) ||
                     n?.nickname?.toLowerCase().includes(lower));
           });
+        }
+        const lookups = await ensureLookups();
+        for (const unit of values) {
+          resolveUnitNames(unit, lookups);
         }
         const page = paginate(values, offset ?? 0, limit ?? 100);
         return {
