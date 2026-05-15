@@ -36,51 +36,83 @@ npm run build
 | `get_version` | DFHack version string | — |
 | `get_df_version` | Dwarf Fortress version string | — |
 | `get_world_info` | World name, game mode, world ID | — |
-| `list_enums` | All enum definitions (flags, labors, skills, professions) | — |
-| `list_job_skills` | Skills, professions, and labors with attributes | `type`, `offset`, `limit` |
-| `list_materials` | Material definitions with optional type filters | `builtin`, `inorganic`, `creatures`, `plants`, `offset`, `limit` |
-| `list_units` | Units with filters and data mask | `scan_all`, `race`, `civ_id`, `alive`, `dead`, `sane`, `mask`, `offset`, `limit` |
+| `list_enums` | All enum definitions | — |
+| `list_job_skills` | Skills, professions, and labors | `type`, `offset`, `limit` |
+| `list_materials` | Material definitions | `builtin`, `inorganic`, `creatures`, `plants`, `offset`, `limit` |
+| `list_units` | Units with filters, data mask, and name resolution | `scan_all`, `race`, `civ_id`, `name`, `mask`, `offset`, `limit` |
 | `list_squads` | Military squads and members | — |
-| `set_unit_labors` | Enable/disable labors for units | `changes[]` |
+| `set_unit_labors` | Enable/disable labors per unit | `changes[]` |
 
 ### `list_units` Mask Options
 
-| Field | What It Returns |
-|-------|----------------|
-| `profession` | Profession enum, custom profession, squad assignment |
-| `skills` | All skill levels and experience per dwarf |
-| `labors` | Enabled labor IDs per dwarf |
-| `miscTraits` | Personality trait values |
+When `mask` is set, the response includes resolved human-readable names from DFHack's internal enums:
+
+```json
+{
+  "profession": 114,
+  "professionName": "Bard",
+  "skills": [{ "id": 117, "level": 8, "name": "Music", "nameNoun": "Musician" }],
+  "labors": [{ "id": 11, "name": "Carpentry" }]
+}
+```
+
+| Mask Field | What It Returns | Names Added |
+|-----------|----------------|-------------|
+| `profession` | Profession enum, squad assignment | `professionName` |
+| `skills` | Skill levels and experience | `name`, `nameNoun` per skill |
+| `labors` | Enabled labors as `{ id, name }` objects | `name` per labor |
+| `miscTraits` | Personality trait values | — |
+
+All names are fetched dynamically from the connected DFHack instance at runtime — they adapt to the running DF version.
+
+### Name Search
+
+`list_units` supports a `name` parameter for client-side substring search, matching on first name, last name, English name, and nickname (case-insensitive):
+
+```
+list_units({ scan_all: true, name: "besmar", mask: { profession: true } })
+```
 
 ### Pagination
 
-`list_units`, `list_materials`, and `list_job_skills` support `offset`/`limit` pagination. Response format:
+`list_units`, `list_materials`, and `list_job_skills` support `offset`/`limit`:
 
 ```json
-{ "total": 175, "offset": 0, "limit": 3, "items": [...] }
+{ "total": 174, "offset": 0, "limit": 20, "items": [...] }
 ```
 
-### Blocked (Requires DFHack `SF_ALLOW_REMOTE` flag)
+### Blocked Methods
 
-All RemoteFortressReader (RFR) methods and the core `RunLua`/`RunCommand` methods are blocked for remote connections. These require adding `SF_ALLOW_REMOTE` in the DFHack source (`RemoteTools.cpp`) or a localhost proxy.
+All RemoteFortressReader (RFR) methods and the core `RunLua`/`RunCommand` are blocked for remote connections. DFHack's `RemoteServer.cpp` checks a per-method `SF_ALLOW_REMOTE` flag — methods without it are rejected for non-localhost clients. Fixing this requires a DFHack source change or a proxy on the DF host.
 
-| Tool | Method |
-|------|--------|
-| `get_version_info` | GetVersionInfo |
-| `get_map_info` | GetMapInfo |
-| `get_view_info` | GetViewInfo |
-| `get_pause_state` | GetPauseState |
-| `get_unit_list` | GetUnitList |
-| `get_unit_list_inside` | GetUnitListInside |
-| `get_block_list` | GetBlockList |
-| `get_material_list` | GetMaterialList |
-| `get_item_list` | GetItemList |
-| `get_building_def_list` | GetBuildingDefList |
-| `get_creature_raws` | GetCreatureRaws |
-| `get_plant_raws` | GetPlantRaws |
-| `get_tiletype_list` | GetTiletypeList |
-| `get_language` | GetLanguage |
-| `run_lua` | RunLua |
+| Method | Provides | Status |
+|--------|----------|--------|
+| `GetUnitList` | Full unit data with current job | Blocked |
+| `GetBlockList` | Map tile/terrain data | Blocked |
+| `GetMapInfo` | Map dimensions | Blocked |
+| `GetPauseState` | Game pause state | Blocked |
+| `GetBuildingDefList` | Building definitions | Blocked |
+| `GetCreatureRaws` | Creature definitions | Blocked |
+| `GetPlantRaws` | Plant definitions | Blocked |
+| `GetTiletypeList` | Tile types | Blocked |
+| `RunLua` | Arbitrary Lua queries | Blocked |
+| `RunCommand` | DFHack console commands | Blocked |
+
+## Data Limitations
+
+The core API provides a **static snapshot** of unit assignments and capabilities:
+
+| Available | Not Available |
+|-----------|--------------|
+| Profession, labors, skills | **Current job** (what they're doing right now) |
+| Names, positions, squad assignments | **Health, injuries, mood, stress** |
+| Civilization membership | **Noble titles** (Count, Mayor — stored as entity positions, not unit data) |
+| Personality traits | **Equipment and inventory** |
+| Which labors are enabled | **Burrow restrictions** |
+| Who leads each squad | **Map, terrain, buildings, items** |
+| Skill levels and experience | **Relationships and family** |
+
+**What this means in practice:** You can see that a dwarf is an unassigned Legendary Weaponsmith with no Forge Weapon labor — a clear mismatch to fix. But you cannot see if that dwarf is currently sleeping, hauling stone, or stuck in a burrow. The dynamic "what are my dwarves doing right now" question requires `RunLua` or RFR methods.
 
 ## Environment Variables
 
