@@ -17,8 +17,13 @@ import {
   type BoundMethod,
 } from "./methods.js";
 
-const DFHACK_HOST = process.env.DFHACK_HOST ?? "127.0.0.1";
-const DFHACK_PORT = parseInt(process.env.DFHACK_PORT ?? "5000", 10);
+function getConfigHost(): string {
+  return process.env.DFHACK_HOST ?? "127.0.0.1";
+}
+
+function getConfigPort(): number {
+  return parseInt(process.env.DFHACK_PORT ?? "5000", 10);
+}
 
 export type ConnectionStatus = "disconnected" | "connecting" | "handshaking" | "binding" | "ready" | "error";
 
@@ -52,8 +57,8 @@ export class DFHackClient {
   }
 
   async connect(host?: string, port?: number): Promise<void> {
-    const h = host ?? DFHACK_HOST;
-    const p = port ?? DFHACK_PORT;
+    const h = host ?? getConfigHost();
+    const p = port ?? getConfigPort();
 
     if (this._status !== "disconnected") {
       throw new Error(`Cannot connect: current status is ${this._status}`);
