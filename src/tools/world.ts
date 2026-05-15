@@ -18,6 +18,36 @@ export function registerWorldTools(server: McpServer) {
     }
   });
 
+  server.tool("get_version", "Get DFHack version string", {}, async () => {
+    try {
+      const client = await getClient();
+      const result = await client.call("GetVersion");
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (err: any) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${err.message}` }],
+        isError: true,
+      };
+    }
+  });
+
+  server.tool("get_df_version", "Get Dwarf Fortress version string", {}, async () => {
+    try {
+      const client = await getClient();
+      const result = await client.call("GetDFVersion");
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (err: any) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${err.message}` }],
+        isError: true,
+      };
+    }
+  });
+
   server.tool("get_world_info", "Get current world information: world name, game mode, and world ID", {}, async () => {
     try {
       const client = await getClient();

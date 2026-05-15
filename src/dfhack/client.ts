@@ -1,5 +1,5 @@
 import * as net from "net";
-import * as protobuf from "protobufjs";
+import protobuf from "protobufjs";
 import {
   createHandshakeRequest,
   validateHandshakeResponse,

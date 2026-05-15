@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { registerWorldTools } from "./tools/world.js";
 import { registerUnitTools } from "./tools/units.js";
 import { registerReferenceTools } from "./tools/reference.js";
+import { registerCoreTools } from "./tools/core.js";
 import { registerLuaTool } from "./tools/lua.js";
 
 const server = new McpServer({
@@ -12,6 +13,7 @@ const server = new McpServer({
 });
 
 registerWorldTools(server);
+registerCoreTools(server);
 registerUnitTools(server);
 registerReferenceTools(server);
 registerLuaTool(server);

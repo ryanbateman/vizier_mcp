@@ -1,4 +1,4 @@
-import * as protobuf from "protobufjs";
+import protobuf from "protobufjs";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
