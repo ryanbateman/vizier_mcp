@@ -113,10 +113,11 @@ export function registerCoreTools(server: McpServer) {
         labors: z.boolean().optional().describe("Include enabled labors for each unit"),
         miscTraits: z.boolean().optional().describe("Include misc traits data for each unit"),
       }).optional().describe("Data mask controlling which additional unit fields are returned"),
+      name: z.string().optional().describe("Filter units by name (substring match, case-insensitive, matches first/last/english/nickname)"),
       offset: z.number().int().min(0).optional().describe("Pagination offset (default: 0)"),
       limit: z.number().int().min(1).max(200).optional().describe("Page size (default: 100)"),
     },
-    async ({ scan_all, race, civ_id, dead, alive, sane, mask, offset, limit }) => {
+    async ({ scan_all, race, civ_id, dead, alive, sane, mask, name, offset, limit }) => {
       try {
         const client = await getClient();
         const input: Record<string, unknown> = {};
@@ -132,7 +133,17 @@ export function registerCoreTools(server: McpServer) {
           input["scanAll"] = true;
         }
         const result = await client.call("ListUnits", input);
-        const values = (result as any).value ?? [];
+        let values = (result as any).value ?? [];
+        if (name) {
+          const lower = name.toLowerCase();
+          values = values.filter((u: any) => {
+            const n = u.name;
+            return (n?.firstName?.toLowerCase().includes(lower) ||
+                    n?.lastName?.toLowerCase().includes(lower) ||
+                    n?.englishName?.toLowerCase().includes(lower) ||
+                    n?.nickname?.toLowerCase().includes(lower));
+          });
+        }
         const page = paginate(values, offset ?? 0, limit ?? 100);
         return {
           content: [{ type: "text" as const, text: JSON.stringify(page, null, 2) }],
