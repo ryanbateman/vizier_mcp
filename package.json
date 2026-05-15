@@ -1,0 +1,33 @@
+{
+  "name": "vizier-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for querying Dwarf Fortress game state via DFHack's remote API",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "vizier-mcp": "./build/index.js"
+  },
+  "scripts": {
+    "proto": "node scripts/generate-proto.mjs",
+    "build": "tsc",
+    "prebuild": "npm run proto",
+    "inspector": "npx @modelcontextprotocol/inspector node build/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "dfhack",
+    "dwarf-fortress",
+    "model-context-protocol"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "protobufjs": "^7.4.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
