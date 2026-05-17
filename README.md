@@ -1,33 +1,79 @@
 # Vizier MCP
 
-An MCP server that lets an LLM understand what's happening in your Dwarf Fortress game. It connects to DFHack's remote API and exposes tools for querying your fortress state — who lives there, what they're skilled at, whether your legendary weaponsmith has been assigned to hauling stone instead of forging.
+An MCP server that lets an LLM understand what's happening in your Dwarf Fortress game. Connect it to DFHack's remote API and ask questions about your fortress — who lives there, what they're wearing, whether your legendary weaponsmith has been assigned to hauling stone, what the map looks like, and more.
 
 ## What You Can Do
 
-Ask questions like these and get real, live answers from your running game:
+When running on the same machine as DF (the typical setup), Vizier has near-complete read access to your game. Here are real examples of what you can ask:
+
+### Workforce
 
 | Question | Tool | What You See |
 |----------|------|-------------|
-| "What's my fortress population?" | `list_units` | 174 dwarves with names, professions, and positions |
+| "What's my population?" | `list_units` | 174 dwarves with names, professions, positions |
+| "Count my Bards vs Poets" | `list_units` with `mask.profession` | 27 Bards, 18 Poets |
 | "Who's my best miner?" | `list_units` with `mask.skills` | Reg Wavedringed, Mining level 28 |
-| "Are there any skill/labor mismatches?" | Compare skills to enabled labors | nish Bentglove has Surgery 10 but SURGERY labor is off |
-| "Count my Bards vs Poets" | `list_units` with `mask.profession` | 27 Bards, 18 Poets, 3 Dancers |
-| "Find a specific dwarf" | `list_units` with `name` | Substring search across all name fields |
-| "What materials are on this map?" | `list_materials` | 319 inorganic materials, iron through adamantine |
-| "Show me my military squads" | `list_squads` | 4 squads with leader names and member rosters |
-| "What labors do my dwarves have?" | `list_enums`, `list_job_skills` | Every labor, skill, and profession with IDs and names |
+| "Find a specific dwarf" | `list_units` with `name` | Substring search across all names |
+| "Show every labor/skill mismatch" | Compare skills to enabled labors | nish Bentglove has Surgery 10 but SURGERY labor off |
+| "What are my dwarves wearing?" | `get_unit_list` (RFR) | Full inventory: item type, material quality, body slot |
+| "List my military squads" | `list_squads` | 4 squads with leaders and rosters |
+| "What labors do dwarves have?" | `list_enums`, `list_job_skills` | Every labor, skill, profession with IDs and names |
 
-## Limitations
+### World & Materials
 
-Vizier can see **what your dwarves are assigned to do** — their skills, enabled labors, squad, profession. It cannot see:
+| Question | Tool | What You See |
+|----------|------|-------------|
+| "What world is this?" | `get_world_info` | "The Universes of Vision", Dwarf Mode |
+| "What materials are here?" | `list_materials` | 319 inorganic materials, iron through adamantine |
+| "Show me a creature's raw stats" | `get_creature_raws` (RFR) | Body parts, attacks, materials for every creature |
+| "What plants grow here?" | `get_plant_raws` (RFR) | Every plant, growths, products, seasons |
+| "List all building types" | `get_building_def_list` (RFR) | Workshop, furnace, trap definitions |
 
-- **What they're doing right now** (mining, hauling, sleeping, idle)
-- **Health, mood, stress, injuries**
-- **Noble titles** (Count, Mayor — stored as entity positions, not unit data)
-- **Inventory, equipment, relationships, burrows**
-- **Map tiles, terrain, buildings, items**
+### Map & Position
 
-These require the RemoteFortressReader plugin or `RunLua`, both of which are blocked for remote connections (see [Why Some Methods Are Blocked](#why-some-methods-are-blocked)). When DF is running locally, many of these are available (see [Local vs Remote Access](#local-vs-remote-access)).
+| Question | Tool | What You See |
+|----------|------|-------------|
+| "What does the map look like?" | `get_block_list` (RFR) | Tile types, terrain, materials for any region |
+| "Where's my camera?" | `get_view_info` (RFR) | Current viewport position and size |
+| "Is the game paused?" | `get_pause_state` (RFR) | true / false |
+| "What are the map dimensions?" | `get_map_info` (RFR) | Block count, embark position, z-levels |
+
+### Data Detail: Core vs RFR
+
+Two APIs serve unit data. The Core API provides a workforce overview; the RFR API adds rich per-unit detail:
+
+| Data | Core `list_units` | RFR `get_unit_list` |
+|------|:---:|:---:|
+| Name, race, gender, civ | ✓ | ✓ |
+| Grid-level position | ✓ | ✓ |
+| Sub-tile position (fractional) | ✗ | ✓ |
+| Facing direction | ✗ | ✓ |
+| Profession (with name resolution) | ✓ | ✓ |
+| Profession display color | ✗ | ✓ |
+| Skills (level, experience) | mask | ✓ |
+| Enabled labors | mask | ✗ |
+| Personality traits | mask | ✗ |
+| Age in years | ✗ | ✓ |
+| Physical appearance (hair, beard, colors) | ✗ | ✓ |
+| Body size | ✗ | ✓ |
+| Full inventory (every item, material, slot) | ✗ | ✓ |
+| Mounted/riding status | ✗ | ✓ |
+
+## If You're Connecting Remotely
+
+When DF runs on a different machine, access is reduced. DFHack's remote server applies a per-method `SF_ALLOW_REMOTE` permission flag. Methods without it are rejected for non-localhost clients. The table below shows exactly what works where.
+
+| Data | Local | Remote |
+|------|:-----:|:------:|
+| Core tools (units, materials, squads, etc.) | ✓ | ✓ |
+| Map info, pause state, creature/plant raws | ✓ | ✗ |
+| Unit inventory, appearance, age | ✓ | ✗ |
+| Map tiles and terrain | ✓ | ✗ |
+| RunLua (arbitrary Lua queries) | ✗* | ✗* |
+
+\**RunLua has an additional module name restriction even locally. See [Why RunLua Is Blocked](#why-runlua-is-blocked).*
+
+To unlock everything remotely, add `SF_ALLOW_REMOTE` to the blocked methods in DFHack's source and rebuild, or run a proxy on the DF host (e.g. `websockify`) to make remote clients appear as localhost.
 
 ## Architecture
 
@@ -53,7 +99,7 @@ npm install
 npm run build
 ```
 
-Configure your MCP host:
+Configure your MCP host. The server reads `DFHACK_HOST` and `DFHACK_PORT` from environment variables:
 
 ```jsonc
 {
@@ -71,7 +117,7 @@ Configure your MCP host:
 }
 ```
 
-(For OpenCode specifically, use `environment` not `env` — OpenCode's schema requires the full `environment` key.)
+> **Note for OpenCode users:** Use `environment` not `env` — OpenCode's config schema requires the full `environment` key. Other MCP hosts may use `env`.
 
 ## Tools
 
@@ -88,6 +134,24 @@ Configure your MCP host:
 | `list_units` | Units with filters and data mask | `scan_all`, `race`, `civ_id`, `name`, `mask`, `offset`, `limit` |
 | `list_squads` | Military squads and members | — |
 | `set_unit_labors` | Enable/disable labors per unit | `changes[]` |
+
+### Local Only (RFR API)
+
+| Tool | Description | Key Parameters |
+|------|-------------|---------------|
+| `get_unit_list` | Full unit data with inventory and appearance | — |
+| `get_unit_list_inside` | Units within a region | `minX`, `minY`, `minZ`, `maxX`, `maxY`, `maxZ` |
+| `get_block_list` | Map tile and terrain data | `minX`, `minY`, `minZ`, `maxX`, `maxY`, `maxZ` |
+| `get_map_info` | Map dimensions and embark position | — |
+| `get_view_info` | Current viewport position and size | — |
+| `get_pause_state` | Whether the game is paused | — |
+| `get_creature_raws` | All creature type definitions | — |
+| `get_plant_raws` | All plant type definitions | — |
+| `get_building_def_list` | All building type definitions | — |
+| `get_item_list` | All item type definitions | — |
+| `get_tiletype_list` | All tile type definitions | — |
+| `get_language` | Language/translation data | — |
+| `get_material_list` | Material definitions (RFR format) | — |
 
 ### `list_units` Detail Options
 
@@ -127,15 +191,13 @@ Large responses from `list_units`, `list_materials`, and `list_job_skills` use `
 { "total": 174, "offset": 0, "limit": 20, "items": [...] }
 ```
 
-## Why Some Methods Are Blocked
+## Why RunLua Is Blocked
 
-DFHack's remote server has two independent restrictions that prevent full game access from a remote connection.
+`RunLua` — the most powerful tool, giving arbitrary Lua access to the entire game state — is blocked by two independent restrictions in the DFHack source. Neither is fixable from the Vizier side.
 
 ### 1. The `SF_ALLOW_REMOTE` permission flag
 
-Every RPC method is registered with a set of flags. Methods without `SF_ALLOW_REMOTE` are rejected if the client connects from anything other than `127.0.0.1`.
-
-The permission check lives at [`RemoteServer.cpp#L257`](https://github.com/DFHack/dfhack/blob/develop/library/RemoteServer.cpp#L257):
+Every method registered with the remote server carries a set of flags. Methods without `SF_ALLOW_REMOTE` are rejected for non-localhost clients. The check lives at [`RemoteServer.cpp#L257`](https://github.com/DFHack/dfhack/blob/develop/library/RemoteServer.cpp#L257):
 
 ```cpp
 if (((fn->flags & SF_ALLOW_REMOTE) != SF_ALLOW_REMOTE)
@@ -143,71 +205,38 @@ if (((fn->flags & SF_ALLOW_REMOTE) != SF_ALLOW_REMOTE)
     // rejected
 ```
 
-The methods that are blocked were registered without the flag in [`RemoteTools.cpp`](https://github.com/DFHack/dfhack/blob/develop/library/RemoteTools.cpp):
+`RunLua` is registered without this flag at [`RemoteTools.cpp#L576`](https://github.com/DFHack/dfhack/blob/develop/library/RemoteTools.cpp#L576):
 
-- `RunLua` at [#L576](https://github.com/DFHack/dfhack/blob/develop/library/RemoteTools.cpp#L576) — no flags
-- `RunCommand` at [#L574](https://github.com/DFHack/dfhack/blob/develop/library/RemoteTools.cpp#L574) — `SF_DONT_SUSPEND` only
-- All RFR plugin methods inherit whatever flags the plugin registers
+```cpp
+addMethod("RunLua", &CoreService::RunLua);  // no flags
+```
 
-Compare to `GetWorldInfo`, which works: `addFunction("GetWorldInfo", GetWorldInfo, SF_ALLOW_REMOTE)`.
+Compare to a working method: `addFunction("GetWorldInfo", GetWorldInfo, SF_ALLOW_REMOTE)`.
 
-### 2. The RunLua module name gate
+### 2. The module name gate
 
-Even on localhost, `RunLua` has an additional restriction at [`RemoteTools.cpp#L642`](https://github.com/DFHack/dfhack/blob/develop/library/RemoteTools.cpp#L642). Only modules matching `rpc.*`, `*.rpc`, or `*-rpc` are accepted:
+Even on localhost, `RunLua` requires the module name to match a whitelist pattern. The gate is at [`RemoteTools.cpp#L642`](https://github.com/DFHack/dfhack/blob/develop/library/RemoteTools.cpp#L642):
 
 ```cpp
 if (!valid) {
     args.rv = CR_WRONG_USAGE;
     out.printerr("Only modules named rpc.* or *.rpc or *-rpc may be called.\n");
-    return 0;
 }
 ```
 
-This means calling `dfhack.internal.getVersion` or any other built-in Lua function is rejected. To use RunLua, you must create a Lua script at e.g. `hack/scripts/rpc/mymodule.lua` and call it with `module: "rpc.mymodule"`.
+Only `rpc.*`, `*.rpc`, or `*-rpc` module names are accepted. Calling `dfhack.internal.getVersion` or any other built-in function is rejected. To use RunLua, you must create a Lua script at e.g. `hack/scripts/rpc/mymodule.lua` and call it with `module: "rpc.mymodule"`.
 
-### Blocked Method Summary
+### What RunLua Would Unlock
 
-| Method | Provides | Restriction |
-|--------|----------|-------------|
-| `GetUnitList` | Full unit data with inventory and appearance | SF_ALLOW_REMOTE |
-| `GetBlockList` | Map tile and terrain data | SF_ALLOW_REMOTE |
-| `GetMapInfo` | Map dimensions | SF_ALLOW_REMOTE |
-| `GetPauseState` | Game pause state | SF_ALLOW_REMOTE |
-| `GetBuildingDefList` | Building definitions | SF_ALLOW_REMOTE |
-| `GetCreatureRaws` | Creature definitions | SF_ALLOW_REMOTE |
-| `GetPlantRaws` | Plant definitions | SF_ALLOW_REMOTE |
-| `GetTiletypeList` | Tile type definitions | SF_ALLOW_REMOTE |
-| `RunLua` | Arbitrary Lua queries | SF_ALLOW_REMOTE + module gate |
-| `RunCommand` | DFHack console commands | SF_ALLOW_REMOTE |
-
-### Local vs Remote Access
-
-When DF is running on the same machine as the MCP server (`127.0.0.1`):
-
-| Data | Available? |
-|------|:----------:|
-| All Core tools (units, materials, squads, etc.) | ✓ |
-| Map info, pause state, creature/plant raws | ✓ |
-| Full unit detail — inventory, appearance, age, sub-tile position | ✓ |
-| RunLua | ✗ (module name gate still applies) |
-
-To unlock everything for remote connections, either add `SF_ALLOW_REMOTE` to the blocked methods in DFHack's source and rebuild, or run a proxy on the DF host (e.g. `websockify`) to make remote clients appear as localhost.
-
-## What the Remote Server Exposes
-
-| Available via Core API | Not Available Remotely |
-|------------------------|------------------------|
-| Version strings (DF + DFHack) | Map tile/block data |
-| World name, game mode, world ID | Unit current jobs and activity |
-| Unit names, positions, races, civ | Unit health, injuries, mood, stress |
-| Profession with human-readable names | Noble titles (entity positions) |
-| Skill levels and experience | Equipment and inventory |
-| Enabled labors per unit | Relationships and family |
-| Personality traits | Burrow assignments |
-| Military squad rosters | Game pause state |
-| All material definitions | Building/item/creature/plant definitions |
-| Enum definitions (labors, skills, etc.) | Lua queries (`RunLua`) |
-| Name search on units | Console commands (`RunCommand`) |
+| Currently Impossible | RunLua Would Enable |
+|---------------------|---------------------|
+| Current jobs (idle, mining, hauling) | `df.global.world.jobs.list` |
+| Health, injuries, mood | `unit.status.misc_traits` and `unit.body` |
+| Noble titles (Count, Mayor) | `df.global.plotinfo.civ.nobles` |
+| Equipment and inventory | `unit.inventory` (also available via RFR locally) |
+| Legends and history | `dfhack.legends` module |
+| Burrow assignments | `unit.burrows` |
+| Relationships | `unit.relationships` |
 
 ## Environment Variables
 
