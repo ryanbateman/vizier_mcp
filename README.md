@@ -2,6 +2,23 @@
 
 MCP server for querying Dwarf Fortress game state via DFHack's remote API.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    A[MCP Host<br/>any client] <-->|stdio<br/>JSON-RPC| B[vizier_mcp<br/>MCP Server<br/>Node.js]
+    B <-->|TCP<br/>protobuf| C[DFHack<br/>Remote Server<br/>port 5000]
+    C --> D[Dwarf Fortress<br/>game engine]
+
+    subgraph DFHack Remote Server
+        E[Core Methods<br/>SF_ALLOW_REMOTE]
+        F[RFR Methods<br/>blocked remotely]
+    end
+
+    C --- E
+    C --- F
+```
+
 ## Setup
 
 ```bash
@@ -98,21 +115,23 @@ All RemoteFortressReader (RFR) methods and the core `RunLua`/`RunCommand` are bl
 | `RunLua` | Arbitrary Lua queries | Blocked |
 | `RunCommand` | DFHack console commands | Blocked |
 
-## Data Limitations
+## What the Remote Server Exposes
 
-The core API provides a **static snapshot** of unit assignments and capabilities:
+| Available via Core API | Not Available Remotely |
+|------------------------|------------------------|
+| Version strings (DF + DFHack) | Map tile/block data |
+| World name, game mode, world ID | Unit current jobs and activity |
+| Unit names, positions, races, civ | Unit health, injuries, mood, stress |
+| Profession with human-readable names | Noble titles (entity positions) |
+| Skill levels and experience | Equipment and inventory |
+| Enabled labors per unit | Relationships and family |
+| Personality traits | Burrow assignments |
+| Military squad rosters | Game pause state |
+| All material definitions | Building/item/creature/plant defs |
+| Enum definitions (labors, skills, etc.) | Lua queries (`RunLua`) |
+| Name search on units | Console commands (`RunCommand`) |
 
-| Available | Not Available |
-|-----------|--------------|
-| Profession, labors, skills | **Current job** (what they're doing right now) |
-| Names, positions, squad assignments | **Health, injuries, mood, stress** |
-| Civilization membership | **Noble titles** (Count, Mayor — stored as entity positions, not unit data) |
-| Personality traits | **Equipment and inventory** |
-| Which labors are enabled | **Burrow restrictions** |
-| Who leads each squad | **Map, terrain, buildings, items** |
-| Skill levels and experience | **Relationships and family** |
-
-**What this means in practice:** You can see that a dwarf is an unassigned Legendary Weaponsmith with no Forge Weapon labor — a clear mismatch to fix. But you cannot see if that dwarf is currently sleeping, hauling stone, or stuck in a burrow. The dynamic "what are my dwarves doing right now" question requires `RunLua` or RFR methods.
+The Core methods are handled by DFHack's own service and carry an `SF_ALLOW_REMOTE` permission flag. RFR methods, `RunLua`, and `RunCommand` lack this flag, so they are rejected for non-localhost connections. A DFHack source change or a localhost proxy on the DF machine is needed to unlock them.
 
 ## Environment Variables
 
