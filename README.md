@@ -100,7 +100,21 @@ list_units({ scan_all: true, name: "besmar", mask: { profession: true } })
 
 ### Blocked Methods
 
-All RemoteFortressReader (RFR) methods and the core `RunLua`/`RunCommand` are blocked for remote connections. DFHack's `RemoteServer.cpp` checks a per-method `SF_ALLOW_REMOTE` flag — methods without it are rejected for non-localhost clients. Fixing this requires a DFHack source change or a proxy on the DF host.
+All RemoteFortressReader (RFR) methods and the core `RunLua`/`RunCommand` are blocked for remote connections by two independent restrictions in the DFHack source:
+
+**1. `SF_ALLOW_REMOTE` flag** — methods registered without this flag are rejected for non-localhost clients.
+
+- Flag check: [`RemoteServer.cpp#L257`](https://github.com/DFHack/dfhack/blob/develop/library/RemoteServer.cpp#L257)
+- `RunLua` registered without the flag: [`RemoteTools.cpp#L576`](https://github.com/DFHack/dfhack/blob/develop/library/RemoteTools.cpp#L576)
+- `RunCommand` without the flag: [`RemoteTools.cpp#L574`](https://github.com/DFHack/dfhack/blob/develop/library/RemoteTools.cpp#L574)
+
+Compare working methods like `GetWorldInfo`: `addFunction("GetWorldInfo", GetWorldInfo, SF_ALLOW_REMOTE)`.
+
+**2. Module name gate** (RunLua only) — even on localhost, RunLua rejects calls unless the module name follows a whitelist pattern.
+
+- Gate: [`RemoteTools.cpp#L642`](https://github.com/DFHack/dfhack/blob/develop/library/RemoteTools.cpp#L642)
+- Only modules named `rpc.*` or `*.rpc` or `*-rpc` are accepted. Any other module name (including empty string) returns `CR_WRONG_USAGE`.
+- To use RunLua, you must create a Lua script at e.g. `hack/scripts/rpc/mymodule.lua` and call it with `module: "rpc.mymodule"`.
 
 | Method | Provides | Status |
 |--------|----------|--------|
@@ -112,7 +126,7 @@ All RemoteFortressReader (RFR) methods and the core `RunLua`/`RunCommand` are bl
 | `GetCreatureRaws` | Creature definitions | Blocked |
 | `GetPlantRaws` | Plant definitions | Blocked |
 | `GetTiletypeList` | Tile types | Blocked |
-| `RunLua` | Arbitrary Lua queries | Blocked |
+| `RunLua` | Arbitrary Lua queries | Blocked (both restrictions) |
 | `RunCommand` | DFHack console commands | Blocked |
 
 ## What the Remote Server Exposes
