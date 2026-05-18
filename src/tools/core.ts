@@ -10,6 +10,8 @@ type LookupTables = {
   unitFlags2: Map<number, string>;
   unitFlags3: Map<number, string>;
   deathInfoFlags: Map<number, string>;
+  material: Map<string, string>;
+  itemType: Map<string, string>;
 };
 
 let cachedLookups: LookupTables | null = null;
@@ -44,8 +46,46 @@ async function ensureLookups(): Promise<LookupTables> {
   const deathInfoFlags = new Map<number, string>();
   for (const f of (enums as any).deathInfoFlags ?? []) deathInfoFlags.set(f.value, f.name);
 
-  cachedLookups = { profession, skill, labor, unitFlags1, unitFlags2, unitFlags3, deathInfoFlags };
+  const material = new Map<string, string>();
+  const itemType = new Map<string, string>();
+
+  cachedLookups = { profession, skill, labor, unitFlags1, unitFlags2, unitFlags3, deathInfoFlags, material, itemType };
+
+  try {
+    const mats = await client.call("GetMaterialList");
+    for (const m of (mats as any).materialList ?? []) {
+      cachedLookups.material.set(`${m.matPair.matType}/${m.matPair.matIndex}`, m.name);
+    }
+  } catch { /* RFR not available remotely */ }
+
+  try {
+    const items = await client.call("GetItemList");
+    for (const i of (items as any).materialList ?? []) {
+      cachedLookups.itemType.set(`${i.matPair.matType}/${i.matPair.matIndex}`, i.id);
+    }
+  } catch { /* RFR not available remotely */ }
+
   return cachedLookups;
+}
+
+export async function getLookups(): Promise<LookupTables> {
+  return ensureLookups();
+}
+
+export function enrichInventory(unit: any, lookups: LookupTables) {
+  if (unit.inventory) {
+    for (const inv of unit.inventory) {
+      if (inv.item) {
+        const matKey = `${inv.item.material.matType}/${inv.item.material.matIndex}`;
+        const matName = lookups.material.get(matKey);
+        if (matName) inv.item.materialName = matName;
+
+        const typeKey = `${inv.item.type.matType}/${inv.item.type.matIndex}`;
+        const typeName = lookups.itemType.get(typeKey);
+        if (typeName) inv.item.typeName = typeName;
+      }
+    }
+  }
 }
 
 function decodeFlags(value: number, map: Map<number, string>): string[] {

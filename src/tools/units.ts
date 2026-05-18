@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getClient } from "../dfhack/client.js";
+import { getLookups, enrichInventory } from "./core.js";
 
 const blockRequestSchema = {
   minX: z.number().describe("Minimum X tile coordinate"),
@@ -16,6 +17,11 @@ export function registerUnitTools(server: McpServer) {
     try {
       const client = await getClient();
       const result = await client.call("GetUnitList");
+      const cr = (result as any).creatureList ?? [];
+      try {
+        const lookups = await getLookups();
+        for (const u of cr) enrichInventory(u, lookups);
+      } catch { /* lookups not available */ }
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
       };
@@ -35,6 +41,11 @@ export function registerUnitTools(server: McpServer) {
       try {
         const client = await getClient();
         const result = await client.call("GetUnitListInside", { minX, minY, minZ, maxX, maxY, maxZ });
+        const cr = (result as any).creatureList ?? [];
+        try {
+          const lookups = await getLookups();
+          for (const u of cr) enrichInventory(u, lookups);
+        } catch { /* lookups not available */ }
         return {
           content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
         };
