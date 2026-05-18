@@ -85,7 +85,7 @@ The only methods blocked for remote access are **RunLua** and **RunCommand** —
 
 ```mermaid
 flowchart LR
-    A[MCP Host<br/>any LLM client] <-->|stdio<br/>JSON-RPC| B[vizier_mcp<br/>MCP Server<br/>Node.js]
+    A[MCP Host<br/>any LLM client] <-->|stdio<br/>JSON-RPC| B[@ryanbateman/vizier-mcp<br/>MCP Server<br/>Node.js]
     B <-->|TCP<br/>protobuf| C[DFHack<br/>Remote Server<br/>port 5000]
     C --> D[Dwarf Fortress<br/>game engine]
 
@@ -98,22 +98,45 @@ flowchart LR
     C --- F
 ```
 
-## Setup
+## Prerequisites
 
-```bash
-npm install
-npm run build
+Vizier requires a running Dwarf Fortress instance with DFHack's remote server enabled. In `dfhack-config/remote-server.json`:
+
+```json
+{ "allow_remote": false, "port": 5000 }
 ```
 
-Configure your MCP host. The server reads `DFHACK_HOST` and `DFHACK_PORT` from environment variables:
+Set `"allow_remote": true` only if connecting from another machine (see [Remote Access](#if-youre-connecting-remotely)).
 
-```jsonc
+## Installation
+
+**Published package (recommended):**
+
+```bash
+npx @ryanbateman/vizier-mcp
+```
+
+**From source:**
+
+```bash
+git clone https://github.com/ryanbateman/vizier_mcp.git
+cd vizier_mcp
+npm install && npm run build
+node build/index.js
+```
+
+## MCP Configuration
+
+Vizier reads `DFHACK_HOST` (default `127.0.0.1`) and `DFHACK_PORT` (default `5000`) from environment variables.
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
 {
-  "mcp": {
+  "mcpServers": {
     "vizier": {
-      "type": "local",
-      "command": ["node", "/path/to/vizier_mcp/build/index.js"],
-      "enabled": true,
+      "command": "npx",
+      "args": ["@ryanbateman/vizier-mcp"],
       "env": {
         "DFHACK_HOST": "127.0.0.1",
         "DFHACK_PORT": "5000"
@@ -123,9 +146,44 @@ Configure your MCP host. The server reads `DFHACK_HOST` and `DFHACK_PORT` from e
 }
 ```
 
-> **Note for OpenCode users:** Use `environment` not `env` — OpenCode's config schema requires the full `environment` key. Other MCP hosts may use `env`.
+**Cursor** (`.cursor/mcp.json`):
 
-> **Note for remote connections:** DFHack's server only accepts localhost connections by default. To connect from another machine, set `"allow_remote": true` in `dfhack-config/remote-server.json`. Even with this setting, `RunLua` and `RunCommand` remain blocked for non-localhost clients (they lack the `SF_ALLOW_REMOTE` permission flag). All other methods — including RemoteFortressReader — work remotely once `allow_remote` is enabled.
+```json
+{
+  "mcpServers": {
+    "vizier": {
+      "command": "npx",
+      "args": ["@ryanbateman/vizier-mcp"],
+      "env": {
+        "DFHACK_HOST": "127.0.0.1",
+        "DFHACK_PORT": "5000"
+      }
+    }
+  }
+}
+```
+
+**OpenCode** (`.opencode/opencode.json`):
+
+```jsonc
+{
+  "mcp": {
+    "vizier": {
+      "type": "local",
+      "command": ["npx", "@ryanbateman/vizier-mcp"],
+      "enabled": true,
+      "environment": {
+        "DFHACK_HOST": "127.0.0.1",
+        "DFHACK_PORT": "5000"
+      }
+    }
+  }
+}
+```
+
+> **From source:** Replace the `npx` command with `["node", "/path/to/vizier_mcp/build/index.js"]`.
+
+> **Remote connections:** DFHack only accepts localhost by default. To connect from another machine, set `"allow_remote": true` in `dfhack-config/remote-server.json`. `RunLua` and `RunCommand` remain blocked for non-localhost clients regardless of this setting.
 
 ## All MCP Tools
 
@@ -256,9 +314,13 @@ Noble titles and inventory are available via the RFR `get_unit_list` tool.
 ## Development
 
 ```bash
+git clone https://github.com/ryanbateman/vizier_mcp.git
+cd vizier_mcp
+npm install
 npm run proto          # regenerate proto JSON from .proto files
 npm run build          # full build (proto + tsc)
 npm run inspector      # run MCP inspector for debugging
+npm test               # run unit tests
 ```
 
 ## License
