@@ -469,7 +469,7 @@ This allows injecting expected responses per test without a real DFHack connecti
 
 ## License
 
-ISC (matching dfhack-remote)
+MIT
 
 ## References
 

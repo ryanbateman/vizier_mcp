@@ -1,7 +1,7 @@
 {
-  "name": "vizier-mcp",
+  "name": "@ryanbateman/vizier-mcp",
   "version": "0.1.0",
-  "description": "MCP server for querying Dwarf Fortress game state via DFHack's remote API",
+  "description": "An helpful Vizier MCP server for understanding your Dwarf Fortress game state, via DFHack's remote API",
   "type": "module",
   "main": "build/index.js",
   "bin": {
@@ -11,7 +11,11 @@
     "proto": "node scripts/generate-proto.mjs",
     "build": "tsc",
     "prebuild": "npm run proto",
-    "inspector": "npx @modelcontextprotocol/inspector node build/index.js"
+    "prepack": "npm run proto && npm run build",
+    "inspector": "npx @modelcontextprotocol/inspector node build/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "mcp",
@@ -19,8 +23,17 @@
     "dwarf-fortress",
     "model-context-protocol"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "Ryan Bateman",
+  "license": "MIT",
+  "types": "build/index.d.ts",
+  "files": ["build", "generated", "README.md", "LICENSE"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ryanbateman/vizier_mcp.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "protobufjs": "^7.4.0",
@@ -28,6 +41,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.0"
+    "@vitest/coverage-v8": "^4.1.6",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.6"
   }
 }

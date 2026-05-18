@@ -1,23 +1,24 @@
 # Vizier MCP
 
-An MCP server that lets an LLM understand what's happening in your Dwarf Fortress game. Connect it to DFHack's remote API and ask questions about your fortress — who lives there, what they're wearing, whether your legendary weaponsmith has been assigned to hauling stone, what the map looks like, and more.
+Vizier is an MCP server/AI integration for Dwarf fortress that allows you to query the state of your ongoing game. It allows your LLM agent to act like a vizier - giving you a helpful assistant to ask about your dwarfs and their world - whether your legendary weaponsmith is accidentally assigned to hauling stone, what your world looks like, what your expedition leader is skilled in, and more. Similar to Dwarf Therapist, its intended as a read-only interface to help understand your world. And when it comes to terrible, potentially incorrect, maybe world-ending advice, what better source than AI your trusted Vizier?
 
 ## What You Can Do
 
-When running on the same machine as DF (the typical setup), Vizier has near-complete read access to your game. Here are real examples of what you can ask:
+When running your LLM Agent (and the Vizier MCP server) on the same machine as DF (the typical setup), Vizier has mixed read access to your game. Here are real examples of what you can ask:
 
 ### Workforce
 
 | Question | Tool | What You See |
 |----------|------|-------------|
 | "What's my population?" | `list_units` | Every dwarf, their profession, where they are, and who they belong to |
-| "Count my Bards vs Poets" | `list_units` with `mask.profession` | Profession distribution across your fortress |
+| "Tell me about my expedition leader?" | `list_units` with `mask.profession` | Get some insight into the leader of your expedition - who they are, what they look like, and whether they are particularly good at dancing or fighting |
+| "What're most of my population's professions?" | `list_units` with `mask.profession` | Profession distribution across your fortress. Identify your Bard epidemic early. |
 | "Who's my best miner?" | `list_units` with `mask.skills` | Skill levels for every dwarf — find your specialists and hidden talent |
 | "Find a specific dwarf" | `list_units` with `name` | Locate any dwarf by first name, last name, English name, or nickname |
 | "Show every labor/skill mismatch" | Compare skills to enabled labors | Spot dwarves assigned to jobs they can't do, or locked out of jobs they're legendary at |
 | "What are my dwarves wearing?" | `get_unit_list` (RFR) | Every item of clothing and armor — what it is, what it's made of, and where it's worn |
 | "List my military squads" | `list_squads` | Squad rosters, leaders, and weapon assignments |
-| "What labors do dwarves have?" | `list_enums`, `list_job_skills` | Every labor, skill, and profession in the game with their attributes |
+| "What labors do dwarves have?" | `list_enums`, `list_job_skills` | Every labor, skill, and profession in the game with their attributes. Spot what you're missing. |
 
 ### World & Materials
 
@@ -30,7 +31,7 @@ When running on the same machine as DF (the typical setup), Vizier has near-comp
 | "List all building types" | `get_building_def_list` (RFR) | All workshops, furnaces, and traps you can construct |
 | "What musical instruments exist?" | `get_item_list` (RFR) | Understand the musical instruments of your world — what they're made of, how they're played, and their sound descriptions |
 
-### Map & Position
+### Map & Meta
 
 | Question | Tool | What You See |
 |----------|------|-------------|
@@ -63,19 +64,22 @@ Two APIs serve unit data. The Core API provides a workforce overview; the RFR AP
 
 ## If You're Connecting Remotely
 
-When DF runs on a different machine, access is reduced. DFHack's remote server applies a per-method `SF_ALLOW_REMOTE` permission flag. Methods without it are rejected for non-localhost clients. The table below shows exactly what works where.
+When DF runs on a different machine to the agent and Vizier MCP server, access to some methods is restricted. This is a restriction of DFHack. DFHack's remote server applies a per-method `SF_ALLOW_REMOTE` permission flag. The table below shows exactly what works where.
+
+> **Important:** Remote connections require `"allow_remote": true` in DFHack's `dfhack-config/remote-server.json`. Without it, the server only binds to 127.0.0.1. If you do want to connect your Vizier MCP server to a remote DFHack instance, you will need to set the flag in the DFHack config (see below).
 
 | Data | Local | Remote |
 |------|:-----:|:------:|
 | Core tools (units, materials, squads, etc.) | ✓ | ✓ |
-| Map info, pause state, creature/plant raws | ✓ | ✗ |
-| Unit inventory, appearance, age | ✓ | ✗ |
-| Map tiles and terrain | ✓ | ✗ |
+| RFR tools (map info, pause state, creature/plant raws, etc.) | ✓ | ✓ |
+| Unit inventory, appearance, age (RFR) | ✓ | ✓ |
+| Map tiles and terrain (RFR) | ✓ | ✓ |
+| RunCommand (DFHack console commands) | ✓ | ✗ |
 | RunLua (arbitrary Lua queries) | ✗* | ✗* |
 
 \**RunLua has an additional module name restriction even locally. See [Why RunLua Is Blocked](#why-runlua-is-blocked).*
 
-To unlock everything remotely, add `SF_ALLOW_REMOTE` to the blocked methods in DFHack's source and rebuild, or run a proxy on the DF host (e.g. `websockify`) to make remote clients appear as localhost.
+The only methods blocked for remote access are **RunLua** and **RunCommand** — these are intentionally local-only for security. All RemoteFortressReader methods are registered with `SF_ALLOW_REMOTE` and are accessible remotely when `allow_remote` is enabled.
 
 ## Architecture
 
@@ -87,7 +91,7 @@ flowchart LR
 
     subgraph DFHack Remote Server
         E[Core Methods<br/>always available]
-        F[RFR Methods<br/>local only]
+        F[RFR Methods<br/>remote-accessible]
     end
 
     C --- E
@@ -110,7 +114,7 @@ Configure your MCP host. The server reads `DFHACK_HOST` and `DFHACK_PORT` from e
       "type": "local",
       "command": ["node", "/path/to/vizier_mcp/build/index.js"],
       "enabled": true,
-      "environment": {
+      "env": {
         "DFHACK_HOST": "127.0.0.1",
         "DFHACK_PORT": "5000"
       }
@@ -121,7 +125,9 @@ Configure your MCP host. The server reads `DFHACK_HOST` and `DFHACK_PORT` from e
 
 > **Note for OpenCode users:** Use `environment` not `env` — OpenCode's config schema requires the full `environment` key. Other MCP hosts may use `env`.
 
-## Tools
+> **Note for remote connections:** DFHack's server only accepts localhost connections by default. To connect from another machine, set `"allow_remote": true` in `dfhack-config/remote-server.json`. Even with this setting, `RunLua` and `RunCommand` remain blocked for non-localhost clients (they lack the `SF_ALLOW_REMOTE` permission flag). All other methods — including RemoteFortressReader — work remotely once `allow_remote` is enabled.
+
+## All MCP Tools
 
 ### Always Available (Core API)
 
@@ -137,7 +143,7 @@ Configure your MCP host. The server reads `DFHACK_HOST` and `DFHACK_PORT` from e
 | `list_squads` | Military squads and members | — |
 | `set_unit_labors` | Enable/disable labors per unit | `changes[]` |
 
-### Local Only (RFR API)
+### RemoteFortressReader (RFR) API
 
 | Tool | Description | Key Parameters |
 |------|-------------|---------------|
@@ -195,7 +201,7 @@ Large responses from `list_units`, `list_materials`, and `list_job_skills` use `
 
 ## Why RunLua Is Blocked
 
-`RunLua` — the most powerful tool, giving arbitrary Lua access to the entire game state — is blocked by two independent restrictions in the DFHack source. Neither is fixable from the Vizier side.
+`RunLua` — the most powerful tool, giving arbitrary Lua access to the entire game state — is blocked by two independent restrictions in the DFHack source. Neither is fixable from the Vizier side. The restrictions make sense - arbitrarily accessing Lua Runtimes is something only the most foolish of Viziers would allow - but it somewhat restricts what this MCP server is capable of. 
 
 ### 1. The `SF_ALLOW_REMOTE` permission flag
 
@@ -228,7 +234,7 @@ if (!valid) {
 
 Only `rpc.*`, `*.rpc`, or `*-rpc` module names are accepted. Calling `dfhack.internal.getVersion` or any other built-in function is rejected. To use RunLua, you must create a Lua script at e.g. `hack/scripts/rpc/mymodule.lua` and call it with `module: "rpc.mymodule"`.
 
-### What RunLua Would Unlock
+### What RunLua (or a clean API) Could Unlock
 
 | Currently Impossible | RunLua Would Enable |
 |---------------------|---------------------|
@@ -238,7 +244,7 @@ Only `rpc.*`, `*.rpc`, or `*-rpc` module names are accepted. Calling `dfhack.int
 | Burrow assignments | `unit.burrows` |
 | Relationships | `unit.relationships` |
 
-Noble titles and inventory are already available locally via the RFR `get_unit_list` tool.
+Noble titles and inventory are available via the RFR `get_unit_list` tool.
 
 ## Environment Variables
 
@@ -257,4 +263,4 @@ npm run inspector      # run MCP inspector for debugging
 
 ## License
 
-ISC
+MIT
