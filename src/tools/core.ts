@@ -39,6 +39,8 @@ function resolveUnitNames(unit: any, lookups: LookupTables) {
     const p = lookups.profession.get(unit.profession);
     if (p) unit.professionName = p.caption;
   }
+  if (unit.gender === 0) unit.genderName = "Female";
+  else if (unit.gender === 1) unit.genderName = "Male";
   if (unit.skills) {
     for (const s of unit.skills) {
       const def = lookups.skill.get(s.id);
