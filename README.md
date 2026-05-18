@@ -28,7 +28,7 @@ When running on the same machine as DF (the typical setup), Vizier has near-comp
 | "Show me a creature's raw stats" | `get_creature_raws` (RFR) | Body parts, attacks, materials for every creature |
 | "What plants grow here?" | `get_plant_raws` (RFR) | Every plant, growths, products, seasons |
 | "List all building types" | `get_building_def_list` (RFR) | Workshop, furnace, trap definitions |
-| "What musical instruments exist?" | `get_item_list` (RFR) | 29 instruments with materials, ranges, and sound descriptions |
+| "What musical instruments exist?" | `get_item_list` (RFR) | Understand the musical instruments of your world — what they're made of, how they're played, and their sound descriptions |
 
 ### Map & Position
 
