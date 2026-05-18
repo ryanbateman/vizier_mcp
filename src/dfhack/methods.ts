@@ -12,16 +12,7 @@ export function getProtoRoot(): protobuf.Root {
 
   const jsonPath = resolve(__dirname, "../../generated/proto.json");
   const json = JSON.parse(readFileSync(jsonPath, "utf-8"));
-
-  const fixedJson = { ...json };
-  if (fixedJson.nested?.RemoteFortressReader?.MapBlock?.fields) {
-    const fields = fixedJson.nested.RemoteFortressReader.MapBlock.fields;
-    delete fields.mapX?.rule;
-    delete fields.mapY?.rule;
-    delete fields.mapZ?.rule;
-  }
-
-  root = protobuf.Root.fromJSON(fixedJson);
+  root = protobuf.Root.fromJSON(json);
   return root;
 }
 

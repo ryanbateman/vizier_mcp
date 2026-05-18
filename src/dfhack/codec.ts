@@ -1,6 +1,7 @@
 export interface DwarfMessage {
   id: number;
   data: Uint8Array;
+  failureCode?: number;
 }
 
 export const RPC_REPLY_RESULT = -1;
@@ -9,6 +10,7 @@ export const RPC_REPLY_TEXT = -3;
 export const RPC_REQUEST_QUIT = -4;
 
 export const CR_LINK_FAILURE = -3;
+export const CR_NEEDS_CONSOLE = -2;
 export const CR_NOT_IMPLEMENTED = -1;
 export const CR_OK = 0;
 export const CR_FAILURE = 1;
@@ -37,12 +39,6 @@ export function decodeHeader(buf: Buffer): { id: number; size: number } | null {
 export function encodeMessage(msg: DwarfMessage): Buffer {
   const header = encodeHeader(msg.id, msg.data.length);
   return Buffer.concat([header, Buffer.from(msg.data)]);
-}
-
-export interface DecodedReply {
-  textMessages: DwarfMessage[];
-  result: DwarfMessage | null;
-  failCode: number | null;
 }
 
 export function createHandshakeRequest(): Buffer {

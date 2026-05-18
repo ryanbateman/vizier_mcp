@@ -26,5 +26,14 @@ for (const file of protoFiles) {
 }
 
 const json = root.toJSON();
+
+// Remove 'rule' fields from MapBlock — protobufjs serializes them but they conflict with oneof handling
+const mapBlockFields = json.nested?.RemoteFortressReader?.nested?.MapBlock?.fields;
+if (mapBlockFields) {
+  delete mapBlockFields.mapX?.rule;
+  delete mapBlockFields.mapY?.rule;
+  delete mapBlockFields.mapZ?.rule;
+}
+
 writeFileSync(`${outDir}/proto.json`, JSON.stringify(json, null, 2));
 console.log(`Generated ${outDir}/proto.json with ${Object.keys(json.nested || {}).length} top-level namespaces`);

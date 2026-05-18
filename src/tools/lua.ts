@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { getClient } from "../dfhack/client.js";
+import { callTool, formatError } from "./helpers.js";
 
 export function registerLuaTool(server: McpServer) {
   server.tool(
@@ -12,22 +12,11 @@ export function registerLuaTool(server: McpServer) {
       arguments: z.array(z.string()).describe("Arguments to pass to the Lua function (as strings)"),
     },
     async ({ module: mod, "function": fn, arguments: args }) => {
-      try {
-        const client = await getClient();
-        const result = await client.call("RunLua", {
-          module: mod,
-          function: fn,
-          arguments: args,
-        });
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-        };
-      } catch (err: any) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err.message}` }],
-          isError: true,
-        };
-      }
+      return callTool("RunLua", {
+        module: mod,
+        function: fn,
+        arguments: args,
+      });
     }
   );
 }
