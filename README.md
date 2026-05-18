@@ -10,34 +10,34 @@ When running on the same machine as DF (the typical setup), Vizier has near-comp
 
 | Question | Tool | What You See |
 |----------|------|-------------|
-| "What's my population?" | `list_units` | 174 dwarves with names, professions, positions |
-| "Count my Bards vs Poets" | `list_units` with `mask.profession` | 27 Bards, 18 Poets |
-| "Who's my best miner?" | `list_units` with `mask.skills` | Reg Wavedringed, Mining level 28 |
-| "Find a specific dwarf" | `list_units` with `name` | Substring search across all names |
-| "Show every labor/skill mismatch" | Compare skills to enabled labors | nish Bentglove has Surgery 10 but SURGERY labor off |
-| "What are my dwarves wearing?" | `get_unit_list` (RFR) | Full inventory: item type, material quality, body slot |
-| "List my military squads" | `list_squads` | 4 squads with leaders and rosters |
-| "What labors do dwarves have?" | `list_enums`, `list_job_skills` | Every labor, skill, profession with IDs and names |
+| "What's my population?" | `list_units` | Every dwarf, their profession, where they are, and who they belong to |
+| "Count my Bards vs Poets" | `list_units` with `mask.profession` | Profession distribution across your fortress |
+| "Who's my best miner?" | `list_units` with `mask.skills` | Skill levels for every dwarf — find your specialists and hidden talent |
+| "Find a specific dwarf" | `list_units` with `name` | Locate any dwarf by first name, last name, English name, or nickname |
+| "Show every labor/skill mismatch" | Compare skills to enabled labors | Spot dwarves assigned to jobs they can't do, or locked out of jobs they're legendary at |
+| "What are my dwarves wearing?" | `get_unit_list` (RFR) | Every item of clothing and armor — what it is, what it's made of, and where it's worn |
+| "List my military squads" | `list_squads` | Squad rosters, leaders, and weapon assignments |
+| "What labors do dwarves have?" | `list_enums`, `list_job_skills` | Every labor, skill, and profession in the game with their attributes |
 
 ### World & Materials
 
 | Question | Tool | What You See |
 |----------|------|-------------|
-| "What world is this?" | `get_world_info` | "The Universes of Vision", Dwarf Mode |
-| "What materials are here?" | `list_materials` | 319 inorganic materials, iron through adamantine |
-| "Show me a creature's raw stats" | `get_creature_raws` (RFR) | Body parts, attacks, materials for every creature |
-| "What plants grow here?" | `get_plant_raws` (RFR) | Every plant, growths, products, seasons |
-| "List all building types" | `get_building_def_list` (RFR) | Workshop, furnace, trap definitions |
+| "What world is this?" | `get_world_info` | Your world's name, game mode, civilization, and site identity |
+| "What materials are here?" | `list_materials` | Every stone, metal, gem, and crafted material available on your map |
+| "Show me a creature's raw stats" | `get_creature_raws` (RFR) | Every creature type — body parts, attacks, materials — know what you're fighting |
+| "What plants grow here?" | `get_plant_raws` (RFR) | Every plant with its growths, products, and harvest seasons |
+| "List all building types" | `get_building_def_list` (RFR) | All workshops, furnaces, and traps you can construct |
 | "What musical instruments exist?" | `get_item_list` (RFR) | Understand the musical instruments of your world — what they're made of, how they're played, and their sound descriptions |
 
 ### Map & Position
 
 | Question | Tool | What You See |
 |----------|------|-------------|
-| "What does the map look like?" | `get_block_list` (RFR) | Tile types, terrain, materials for any region |
-| "Where's my camera?" | `get_view_info` (RFR) | Current viewport position and size |
-| "Is the game paused?" | `get_pause_state` (RFR) | true / false |
-| "What are the map dimensions?" | `get_map_info` (RFR) | Block count, embark position, z-levels |
+| "What does the map look like?" | `get_block_list` (RFR) | Tile types, terrain, and materials for any region of the map |
+| "Where's my camera?" | `get_view_info` (RFR) | What the player is currently looking at and how large the viewport is |
+| "Is the game paused?" | `get_pause_state` (RFR) | Whether the game is currently paused or running |
+| "What are the map dimensions?" | `get_map_info` (RFR) | Block count, embark position, and z-level depth |
 
 ### Data Detail: Core vs RFR
 
