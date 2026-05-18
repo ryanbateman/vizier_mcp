@@ -6,6 +6,10 @@ type LookupTables = {
   profession: Map<number, { key: string; caption: string }>;
   skill: Map<number, { key: string; caption: string; captionNoun: string }>;
   labor: Map<number, { key: string; caption: string }>;
+  unitFlags1: Map<number, string>;
+  unitFlags2: Map<number, string>;
+  unitFlags3: Map<number, string>;
+  deathInfoFlags: Map<number, string>;
 };
 
 let cachedLookups: LookupTables | null = null;
@@ -30,8 +34,29 @@ async function ensureLookups(): Promise<LookupTables> {
     labor.set(l.id, { key: l.key, caption: l.caption });
   }
 
-  cachedLookups = { profession, skill, labor };
+  const enums = await client.call("ListEnums");
+  const unitFlags1 = new Map<number, string>();
+  for (const f of (enums as any).unitFlags1 ?? []) unitFlags1.set(f.value, f.name);
+  const unitFlags2 = new Map<number, string>();
+  for (const f of (enums as any).unitFlags2 ?? []) unitFlags2.set(f.value, f.name);
+  const unitFlags3 = new Map<number, string>();
+  for (const f of (enums as any).unitFlags3 ?? []) unitFlags3.set(f.value, f.name);
+  const deathInfoFlags = new Map<number, string>();
+  for (const f of (enums as any).deathInfoFlags ?? []) deathInfoFlags.set(f.value, f.name);
+
+  cachedLookups = { profession, skill, labor, unitFlags1, unitFlags2, unitFlags3, deathInfoFlags };
   return cachedLookups;
+}
+
+function decodeFlags(value: number, map: Map<number, string>): string[] {
+  const names: string[] = [];
+  for (let bit = 0; bit < 32; bit++) {
+    if (value & (1 << bit)) {
+      const name = map.get(bit);
+      if (name) names.push(name);
+    }
+  }
+  return names;
 }
 
 function resolveUnitNames(unit: any, lookups: LookupTables) {
@@ -41,6 +66,10 @@ function resolveUnitNames(unit: any, lookups: LookupTables) {
   }
   if (unit.gender === 0) unit.genderName = "Female";
   else if (unit.gender === 1) unit.genderName = "Male";
+  if (unit.flags1 !== undefined) unit.flags1Names = decodeFlags(unit.flags1, lookups.unitFlags1);
+  if (unit.flags2 !== undefined) unit.flags2Names = decodeFlags(unit.flags2, lookups.unitFlags2);
+  if (unit.flags3 !== undefined) unit.flags3Names = decodeFlags(unit.flags3, lookups.unitFlags3);
+  if (unit.deathFlags !== undefined) unit.deathFlagsNames = decodeFlags(unit.deathFlags, lookups.deathInfoFlags);
   if (unit.skills) {
     for (const s of unit.skills) {
       const def = lookups.skill.get(s.id);
