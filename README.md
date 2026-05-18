@@ -58,6 +58,7 @@ Two APIs serve unit data. The Core API provides a workforce overview; the RFR AP
 | Body size | ✗ | ✓ |
 | Full inventory (every item, material, slot) | ✗ | ✓ |
 | Mounted/riding status | ✗ | ✓ |
+| Noble titles (Expedition Leader, Baron, Count, etc.) | ✗ | ✓ |
 
 ## If You're Connecting Remotely
 
@@ -232,11 +233,11 @@ Only `rpc.*`, `*.rpc`, or `*-rpc` module names are accepted. Calling `dfhack.int
 |---------------------|---------------------|
 | Current jobs (idle, mining, hauling) | `df.global.world.jobs.list` |
 | Health, injuries, mood | `unit.status.misc_traits` and `unit.body` |
-| Noble titles (Count, Mayor) | `df.global.plotinfo.civ.nobles` |
-| Equipment and inventory | `unit.inventory` (also available via RFR locally) |
 | Legends and history | `dfhack.legends` module |
 | Burrow assignments | `unit.burrows` |
 | Relationships | `unit.relationships` |
+
+Noble titles and inventory are already available locally via the RFR `get_unit_list` tool.
 
 ## Environment Variables
 
