@@ -363,7 +363,25 @@ export class DFHackClient {
     return this.call(methodName, input) as unknown as T;
   }
 
+  // The DFHack wire protocol allows only one in-flight RPC per connection
+  // (sendRecv enforces this). Serialize all public calls so concurrent
+  // callers (e.g. Promise.all in the lookup cache) queue instead of throwing.
+  private rpcChain: Promise<unknown> = Promise.resolve();
+
   async call(methodName: string, input?: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const run = () => this.callUnsynchronized(methodName, input);
+    const result = this.rpcChain.then(run, run);
+    this.rpcChain = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private async callUnsynchronized(
+    methodName: string,
+    input?: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
     const method = this.methods.get(methodName);
     if (!method) {
       const available = this.availableMethods.join(", ");

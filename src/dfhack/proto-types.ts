@@ -72,6 +72,8 @@ export interface UnitBase {
   deathFlagsNames?: string[];
   skills?: Array<{ id: number; name?: string; nameNoun?: string }>;
   labors?: number[] | Array<{ id: number; name?: string }>;
+  race?: number | { matType: number; matIndex: number };
+  raceName?: string;
 }
 
 export interface ListUnitsOut {
@@ -83,6 +85,12 @@ export interface ListMaterialsOut {
 }
 
 export interface CreatureRaw {
+  id?: number;
+  name?: string;
+  race?: number | { matType: number; matIndex: number };
+  raceName?: string;
+  profession?: number;
+  professionName?: string;
   inventory?: Array<{
     item?: {
       material?: { matType: number; matIndex: number };
@@ -91,14 +99,29 @@ export interface CreatureRaw {
       typeName?: string;
     };
   }>;
+  [key: string]: unknown;
 }
 
 export interface UnitList {
   creatureList: CreatureRaw[];
 }
 
+export interface CreatureRawDef {
+  index: number;
+  creatureId: string;
+  name?: string[];
+}
+
+export interface CreatureRawList {
+  creatureRaws?: CreatureRawDef[];
+}
+
 export interface GetWorldInfoOut {
-  worldName: string;
-  worldId: number;
-  gameMode: number;
+  mode?: number;
+  // Stable per-save identifier (proto field `save_dir`). There is no
+  // numeric world id in this message — use this to detect a save change.
+  saveDir?: string;
+  worldName?: unknown;
+  civId?: number;
+  siteId?: number;
 }

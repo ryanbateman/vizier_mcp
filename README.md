@@ -11,12 +11,12 @@ When running your LLM Agent (and the Vizier MCP server) on the same machine as D
 | Question | Tool | What You See |
 |----------|------|-------------|
 | "What's my population?" | `list_units` | Every dwarf, their profession, where they are, and who they belong to |
-| "Tell me about my expedition leader?" | `list_units` with `mask.profession` | Get some insight into the leader of your expedition - who they are, what they look like, and whether they are particularly good at dancing or fighting |
+| "Tell me about my expedition leader?" | `get_unit` by name | Who they are, their noble position, what they're wearing, and what they're skilled at — noble positions come from the RFR unit data, not `list_units` |
 | "What're most of my population's professions?" | `list_units` with `mask.profession` | Profession distribution across your fortress. Identify your Bard epidemic early. |
 | "Who's my best miner?" | `list_units` with `mask.skills` | Skill levels for every dwarf — find your specialists and hidden talent |
 | "Find a specific dwarf" | `list_units` with `name` | Locate any dwarf by first name, last name, English name, or nickname |
 | "Show every labor/skill mismatch" | Compare skills to enabled labors | Spot dwarves assigned to jobs they can't do, or locked out of jobs they're legendary at |
-| "What are my dwarves wearing?" | `get_unit_list` (RFR) | Every item of clothing and armor — what it is, what it's made of, and where it's worn |
+| "What is this dwarf wearing?" | `get_unit` by name/id, or `list_units` with `include_inventory` | One call returns the unit's clothing and armor with material and item names already resolved |
 | "List my military squads" | `list_squads` | Squad rosters, leaders, and weapon assignments |
 | "What labors do dwarves have?" | `list_enums`, `list_job_skills` | Every labor, skill, and profession in the game with their attributes. Spot what you're missing. |
 
@@ -26,10 +26,10 @@ When running your LLM Agent (and the Vizier MCP server) on the same machine as D
 |----------|------|-------------|
 | "What world is this?" | `get_world_info` | Your world's name, game mode, civilization, and site identity |
 | "What materials are here?" | `list_materials` | Every stone, metal, gem, and crafted material available on your map |
-| "Show me a creature's raw stats" | `get_creature_raws` (RFR) | Every creature type — body parts, attacks, materials — know what you're fighting |
-| "What plants grow here?" | `get_plant_raws` (RFR) | Every plant with its growths, products, and harvest seasons |
-| "List all building types" | `get_building_def_list` (RFR) | All workshops, furnaces, and traps you can construct |
-| "What musical instruments exist?" | `get_item_list` (RFR) | Understand the musical instruments of your world — what they're made of, how they're played, and their sound descriptions |
+| "Show me a creature's raw stats" | `get_reference_data kind=creature_raws` | Every creature type — body parts, attacks, materials — know what you're fighting |
+| "What plants grow here?" | `get_reference_data kind=plant_raws` | Every plant with its growths, products, and harvest seasons |
+| "List all building types" | `get_reference_data kind=building_defs` | All workshops, furnaces, and traps you can construct |
+| "What musical instruments exist?" | `get_reference_data kind=item_types` | Understand the musical instruments of your world — what they're made of, how they're played, and their sound descriptions |
 
 ### Map & Meta
 
@@ -193,11 +193,12 @@ Vizier reads `DFHACK_HOST` (default `127.0.0.1`) and `DFHACK_PORT` (default `500
 |------|-------------|---------------|
 | `get_version` | DFHack version | — |
 | `get_df_version` | Dwarf Fortress version | — |
-| `get_world_info` | World name, game mode, IDs | — |
-| `list_enums` | Labor, skill, profession enums | — |
-| `list_job_skills` | Skills, professions, and labors | `type`, `offset`, `limit` |
-| `list_materials` | Materials (stone, metal, gem, etc.) | `inorganic`, `builtin`, `creatures`, `plants`, `offset`, `limit` |
-| `list_units` | Units with filters and data mask | `scan_all`, `race`, `civ_id`, `name`, `mask`, `offset`, `limit` |
+| `get_world_info` | Save dir, game mode, civ/site IDs (no numeric world id) | — |
+| `get_reference_data` | **All static reference data**, cached per save (materials, item types, enums, job skills, creature/plant raws, building defs, tiletypes, language) | `kind`, `type`, `offset`, `limit` |
+| `list_enums` | Alias for `get_reference_data kind=enums` | — |
+| `list_job_skills` | Alias for `get_reference_data kind=job_skills` | `type`, `offset`, `limit` |
+| `list_materials` | Live *filtered* material query (not the static dump) | `inorganic`, `builtin`, `creatures`, `plants`, `offset`, `limit` |
+| `list_units` | Units with filters and data mask | `scan_all`, `race`, `civ_id`, `name`, `mask`, `include_inventory`, `offset`, `limit` |
 | `list_squads` | Military squads and members | — |
 | `set_unit_labors` | Enable/disable labors per unit | `changes[]` |
 
@@ -205,19 +206,24 @@ Vizier reads `DFHACK_HOST` (default `127.0.0.1`) and `DFHACK_PORT` (default `500
 
 | Tool | Description | Key Parameters |
 |------|-------------|---------------|
+| `get_unit` | A single fully-enriched unit by `id` or `name`, incl. inventory and noble positions (backed by RFR `GetUnitList`) | `id`, `name` |
 | `get_unit_list` | Full unit data with inventory and appearance | — |
 | `get_unit_list_inside` | Units within a region | `minX`, `minY`, `minZ`, `maxX`, `maxY`, `maxZ` |
 | `get_block_list` | Map tile and terrain data | `minX`, `minY`, `minZ`, `maxX`, `maxY`, `maxZ` |
 | `get_map_info` | Map dimensions and embark position | — |
 | `get_view_info` | Current viewport position and size | — |
 | `get_pause_state` | Whether the game is paused | — |
-| `get_creature_raws` | All creature type definitions | — |
-| `get_plant_raws` | All plant type definitions | — |
-| `get_building_def_list` | All building type definitions | — |
-| `get_item_list` | All item type definitions | — |
-| `get_tiletype_list` | All tile type definitions | — |
-| `get_language` | Language/translation data | — |
-| `get_material_list` | Material definitions (RFR format) | — |
+
+Creature raws, plant raws, building defs, item types, tiletypes, language and the full material dump are served by **`get_reference_data`** (cached per save) and as **MCP resources** — see below.
+
+### Reference Data: tool + resources
+
+Static game reference data is cached per save and exposed two ways so the model rarely needs a repeat call:
+
+- **Tool:** `get_reference_data({ kind, type?, offset?, limit? })` where `kind` is one of `materials`, `item_types`, `enums`, `job_skills`, `creature_raws`, `plant_raws`, `building_defs`, `tiletypes`, `language`.
+- **Resources:** each dataset is also an MCP resource (`vizier://reference/materials`, `vizier://reference/job-skills`, …) that capable clients read once and cache.
+
+Unit and item tool responses (`get_unit`, `list_units`, `get_unit_list`, …) already have profession, skill, labor, flag, race, material and item **names resolved server-side**, so you usually do not need a reference call just to decode IDs. The cache hits DFHack at most once per save (revalidated at most once per 60s and dropped on reconnect).
 
 ### `list_units` Detail Options
 
@@ -251,7 +257,7 @@ list_units({ scan_all: true, name: "besmar", mask: { profession: true } })
 
 ### Pagination
 
-Large responses from `list_units`, `list_materials`, and `list_job_skills` use `offset`/`limit`:
+Large responses from `list_units`, `list_materials`, `list_job_skills`, and `get_reference_data` use `offset`/`limit`:
 
 ```json
 { "total": 174, "offset": 0, "limit": 20, "items": [...] }
@@ -302,7 +308,7 @@ Only `rpc.*`, `*.rpc`, or `*-rpc` module names are accepted. Calling `dfhack.int
 | Burrow assignments | `unit.burrows` |
 | Relationships | `unit.relationships` |
 
-Noble titles and inventory are available via the RFR `get_unit_list` tool.
+Noble titles and inventory are available via the RFR `get_unit` / `get_unit_list` tools.
 
 ## Environment Variables
 
