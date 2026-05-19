@@ -8,7 +8,8 @@ import {
   enrichCreatureList,
   enrichUnitList,
 } from "./helpers.js";
-import { paginate } from "../pagination.js";
+import { paginateBySize } from "../pagination.js";
+import { projectUnits } from "../projection.js";
 import { blockRequestSchema } from "./schemas.js";
 import type { ListUnitsOut, UnitList, UnitBase, CreatureRaw } from "../dfhack/proto-types.js";
 
@@ -33,7 +34,11 @@ export function registerUnitTools(server: McpServer) {
     "List units in the fortress with optional filters. Returns names, positions, races, skills." +
       " Set include_inventory to also get each unit's worn/carried items with resolved" +
       " material and item names (answers \"what is X wearing\" in one call)." +
-      " Note: response can be large for big fortresses." +
+      " Output is trimmed by default (drops raw flag ints when *Names are present and" +
+      " keeps each skill as { name, level }); pass summary:true for a roster" +
+      " (id, name, race, profession, top skill) or verbose:true for the full original" +
+      " shape. Pages are also bounded by serialized size and may set truncated:true" +
+      " + nextOffset before hitting the requested limit." +
       NAMES_RESOLVED_NOTE,
     {
       scan_all: z.boolean().optional().describe("Scan all active and killed units (default: false)"),
@@ -50,10 +55,12 @@ export function registerUnitTools(server: McpServer) {
       }).optional().describe("Data mask controlling which additional unit fields are returned"),
       name: z.string().optional().describe("Filter units by name (substring match, case-insensitive, matches first/last/english/nickname)"),
       include_inventory: z.boolean().optional().describe("Attach each unit's enriched inventory (worn/carried items with material + item names)"),
+      summary: z.boolean().optional().describe("Roster shape only: { id, name, raceName, professionName, topSkill }. Overrides verbose."),
+      verbose: z.boolean().optional().describe("Return the full original shape (raw flag ints + skill nameNoun/experience). Off by default."),
       offset: z.number().int().min(0).optional().describe("Pagination offset (default: 0)"),
       limit: z.number().int().min(1).max(200).optional().describe("Page size (default: 100)"),
     },
-    async ({ scan_all, race, civ_id, dead, alive, sane, mask, name, include_inventory, offset, limit }) => {
+    async ({ scan_all, race, civ_id, dead, alive, sane, mask, name, include_inventory, summary, verbose, offset, limit }) => {
       try {
         const input: Record<string, unknown> = {};
         if (race !== undefined) input["race"] = race;
@@ -75,7 +82,20 @@ export function registerUnitTools(server: McpServer) {
         }
         await enrichUnitList(values);
 
-        const page = paginate(values, offset ?? 0, limit ?? 100);
+        // Summary roster has no inventory shape and ignores include_inventory.
+        if (summary) {
+          const page = paginateBySize(
+            projectUnits(values, { summary: true }),
+            offset ?? 0,
+            limit ?? 100,
+          );
+          return jsonResult(page);
+        }
+
+        // Default (trim) or verbose paths preserve the UnitBase shape, so the
+        // inventory join can attach { inventory } to each page item.
+        const projected = projectUnits(values, { verbose });
+        const page = paginateBySize(projected, offset ?? 0, limit ?? 100);
 
         if (include_inventory && page.items.length > 0) {
           const rfr = await callToolTyped<UnitList>("GetUnitList");

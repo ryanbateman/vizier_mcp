@@ -12,6 +12,12 @@ Similar to Dwarf Therapist, its intended as a read-only interface to help unders
 
 The goal of Vizier is to help a user understand what is happening in their fortress more easily (much like, you know, a real Vizier.) The Vizier only *reads* your game - it doesn't play or affect the gameplay, in part due to limitations in its design, in part through design choice. Below are some example questions you could ask your LLM (but I have been discovering more as I play and would welcome some examples from others!).
 
+### "Where am I, and who do I have to work with?"
+
+*"Of course, my lord. Let us take stock before the next disaster takes stock of us."*
+
+`get_fortress_overview` is the single call that fits on a postcard: the world's name and game mode, your embark in tiles and the depth of stone beneath it, your civilisation/site identifiers, and a tally of every dwarf — their professions in a histogram, the gender split, and a list of the genuinely skilled (any soul above journeyman level). It is the natural opener; from there `list_units` (try `summary:true` for a roster) and `get_unit` will tell you everything the overview only hinted at.
+
 ### "A forgotten beast claws at the gate. Describe it."
 
 *"Of course, my lord. Let us see what crawled up from the dark to end us this time."*

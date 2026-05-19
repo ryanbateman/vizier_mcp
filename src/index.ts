@@ -9,6 +9,7 @@ import { registerWorldTools } from "./tools/world.js";
 import { registerUnitTools } from "./tools/units.js";
 import { registerReferenceTools, registerReferenceResources } from "./tools/reference.js";
 import { registerMapTools } from "./tools/map.js";
+import { registerOverviewTools } from "./tools/overview.js";
 import { registerLuaTool } from "./tools/lua.js";
 import { disconnectClient } from "./dfhack/client.js";
 import { warmCache } from "./lookup-cache.js";
@@ -40,6 +41,7 @@ registerUnitTools(server);
 registerReferenceTools(server);
 registerReferenceResources(server);
 registerMapTools(server);
+registerOverviewTools(server);
 if (runLuaEnabled()) registerLuaTool(server);
 
 let shuttingDown = false;
