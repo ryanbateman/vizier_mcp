@@ -214,7 +214,7 @@ When DF runs on a different machine to the agent, DFHack restricts some methods 
 
 ```mermaid
 flowchart LR
-    A[MCP Host<br/>any LLM client] <-->|stdio<br/>JSON-RPC| B[@ryanbateman/vizier-mcp<br/>MCP Server<br/>Node.js]
+    A[MCP Host<br/>any LLM client] <-->|stdio<br/>JSON-RPC| B["@ryanbateman/vizier-mcp<br/>MCP Server<br/>Node.js"]
     B <-->|TCP<br/>protobuf| C[DFHack<br/>Remote Server<br/>port 5000]
     C --> D[Dwarf Fortress<br/>game engine]
 ```
