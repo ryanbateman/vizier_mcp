@@ -1,4 +1,4 @@
-import { getClient, type DFHackClient } from "./dfhack/client.js";
+import { getClient, callRpc, type DFHackClient } from "./dfhack/client.js";
 import type {
   ListJobSkillsOut,
   ListEnumsOut,
@@ -107,11 +107,11 @@ function attachInvalidationHook(client: DFHackClient): void {
  * valid for the current world; invalidates and returns false otherwise.
  * Costs at most one GetWorldInfo RPC per WORLD_CHECK_TTL_MS.
  */
-async function isCacheFresh(client: DFHackClient): Promise<boolean> {
+async function isCacheFresh(): Promise<boolean> {
   if (cachedSaveId === null) return false;
   if (Date.now() - lastWorldCheckAt < WORLD_CHECK_TTL_MS) return true;
   try {
-    const info = await client.callTyped<GetWorldInfoOut>("GetWorldInfo");
+    const info = await callRpc<GetWorldInfoOut>("GetWorldInfo");
     lastWorldCheckAt = Date.now();
     if (info.saveDir === cachedSaveId) return true;
     console.error(
@@ -130,7 +130,7 @@ export async function ensureLookups(): Promise<LookupTables> {
   const client = await getClient();
   attachInvalidationHook(client);
 
-  if (cachedLookups && (await isCacheFresh(client))) {
+  if (cachedLookups && (await isCacheFresh())) {
     return cachedLookups;
   }
 
@@ -139,8 +139,8 @@ export async function ensureLookups(): Promise<LookupTables> {
   lookupPromise = (async () => {
     try {
       const [result, enums] = await Promise.all([
-        client.callTyped<ListJobSkillsOut>("ListJobSkills"),
-        client.callTyped<ListEnumsOut>("ListEnums"),
+        callRpc<ListJobSkillsOut>("ListJobSkills"),
+        callRpc<ListEnumsOut>("ListEnums"),
       ]);
 
       const profession = new Map<number, { key: string; caption: string }>();
@@ -186,10 +186,10 @@ export async function ensureLookups(): Promise<LookupTables> {
 
       const [matsResult, itemsResult, worldResult, creaturesResult] =
         await Promise.allSettled([
-          client.callTyped<MaterialList>("GetMaterialList"),
-          client.callTyped<MaterialList>("GetItemList"),
-          client.callTyped<GetWorldInfoOut>("GetWorldInfo"),
-          client.callTyped<CreatureRawList>("GetCreatureRaws"),
+          callRpc<MaterialList>("GetMaterialList"),
+          callRpc<MaterialList>("GetItemList"),
+          callRpc<GetWorldInfoOut>("GetWorldInfo"),
+          callRpc<CreatureRawList>("GetCreatureRaws"),
         ]);
 
       if (matsResult.status === "fulfilled") {
@@ -257,7 +257,7 @@ export async function getReferenceDataset<T = unknown>(
 ): Promise<T> {
   const client = await getClient();
   attachInvalidationHook(client);
-  await isCacheFresh(client);
+  await isCacheFresh();
 
   if (!force && referenceCache.has(kind)) {
     return referenceCache.get(kind) as T;
@@ -268,7 +268,7 @@ export async function getReferenceDataset<T = unknown>(
 
   const p = (async () => {
     try {
-      const value = await client.callTyped<T>(REFERENCE_METHOD[kind]);
+      const value = await callRpc<T>(REFERENCE_METHOD[kind]);
       referenceCache.set(kind, value);
       return value;
     } finally {

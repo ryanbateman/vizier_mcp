@@ -32,6 +32,47 @@ export class DFHackRPCError extends Error {
   }
 }
 
+/** Transport-level failure (not connected, timed out, socket reset). Retryable for reads. */
+export class DFHackConnectionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DFHackConnectionError";
+  }
+}
+
+/**
+ * FIFO async mutex: serializes async tasks so only one runs at a time, in
+ * submission order. Used to enforce the DFHack wire protocol's one-in-flight
+ * rule for every path (public calls and method binding alike).
+ */
+export function createSerializer(): <T>(fn: () => Promise<T>) => Promise<T> {
+  let chain: Promise<unknown> = Promise.resolve();
+  return <T>(fn: () => Promise<T>): Promise<T> => {
+    const result = chain.then(fn, fn);
+    chain = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
+}
+
+/** Methods that change game state — never auto-retried. */
+export const MUTATING_METHODS = new Set(["SetUnitLabors", "RunLua", "RunCommand"]);
+
+/** Whether an error is a transient transport failure worth one retry. */
+export function isRetryable(err: unknown): boolean {
+  if (err instanceof DFHackConnectionError) return true;
+  if (err instanceof DFHackRPCError) return false;
+  const m = err instanceof Error ? err.message : String(err);
+  return /not connected|timed out|timeout|ECONNRESET|EPIPE|socket|disconnected/i.test(m);
+}
+
+/** Retry policy: idempotent reads may retry once on transient transport errors. */
+export function shouldRetry(method: string, err: unknown): boolean {
+  return !MUTATING_METHODS.has(method) && isRetryable(err);
+}
+
 function buildFailureMessage(methodName: string, code?: number): string {
   let reason = "";
   if (code === CR_WRONG_USAGE) {
@@ -58,6 +99,11 @@ function getConfigHost(): string {
 
 function getConfigPort(): number {
   return parseInt(process.env.DFHACK_PORT ?? "5000", 10);
+}
+
+export function getConfigTimeoutMs(): number {
+  const v = parseInt(process.env.DFHACK_RPC_TIMEOUT_MS ?? "60000", 10);
+  return Number.isFinite(v) && v > 0 ? v : 60000;
 }
 
 export type ConnectionStatus = "disconnected" | "connecting" | "handshaking" | "binding" | "ready" | "error";
@@ -277,13 +323,47 @@ export class DFHackClient {
     this.readRawTarget = 0;
   }
 
-  private async sendRecv(msg: DwarfMessage, timeoutMs: number = 30000): Promise<DwarfMessage[]> {
+  // FIFO mutex enforcing the protocol's one-in-flight rule for EVERY caller
+  // (public calls and bindAllMethods). Makes a concurrent send structurally
+  // impossible rather than something to throw on.
+  private runExclusive = createSerializer();
+
+  /**
+   * Destroy the socket and mark disconnected. Used when the protocol stream
+   * is no longer trustworthy (timeout): without request/response correlation,
+   * a stale late reply would be misrouted to the next call, so the only safe
+   * recovery is to drop the connection and let getClient() rebuild it.
+   */
+  private poison(): void {
+    this.pendingResolve = null;
+    this.pendingReject = null;
+    this.pendingTimedOut = false;
+    if (this.socket) {
+      try {
+        this.socket.destroy();
+      } catch {
+        // ignore
+      }
+      this.socket = null;
+    }
+    if (this._status !== "disconnected" && this._status !== "error") {
+      this.setStatus("disconnected");
+    }
+  }
+
+  private sendRecv(msg: DwarfMessage, timeoutMs: number = getConfigTimeoutMs()): Promise<DwarfMessage[]> {
+    return this.runExclusive(() => this.sendRecvLocked(msg, timeoutMs));
+  }
+
+  private sendRecvLocked(msg: DwarfMessage, timeoutMs: number): Promise<DwarfMessage[]> {
     if (!this.socket || (this._status !== "ready" && this._status !== "binding")) {
-      throw new Error(`Not connected (status: ${this._status})`);
+      throw new DFHackConnectionError(`Not connected (status: ${this._status})`);
     }
 
     if (this.pendingResolve) {
-      throw new Error("Concurrent RPC call attempted — only one call allowed at a time");
+      // Unreachable with the mutex; defensive only.
+      console.error("[vizier-mcp] Invariant violated: pendingResolve set at sendRecv start");
+      this.cleanupPending(new DFHackConnectionError("Superseded by a new RPC"));
     }
 
     return new Promise<DwarfMessage[]>((resolve, reject) => {
@@ -293,10 +373,8 @@ export class DFHackClient {
       this.socket!.write(encodeMessage(msg));
 
       const timer = setTimeout(() => {
-        this.pendingTimedOut = true;
-        this.pendingResolve = null;
-        this.pendingReject = null;
-        reject(new Error(`RPC call timeout after ${timeoutMs}ms`));
+        reject(new DFHackConnectionError(`RPC call timed out after ${timeoutMs}ms; resetting connection`));
+        this.poison();
       }, timeoutMs);
 
       const origResolve = this.pendingResolve;
@@ -363,22 +441,9 @@ export class DFHackClient {
     return this.call(methodName, input) as unknown as T;
   }
 
-  // The DFHack wire protocol allows only one in-flight RPC per connection
-  // (sendRecv enforces this). Serialize all public calls so concurrent
-  // callers (e.g. Promise.all in the lookup cache) queue instead of throwing.
-  private rpcChain: Promise<unknown> = Promise.resolve();
-
-  async call(methodName: string, input?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const run = () => this.callUnsynchronized(methodName, input);
-    const result = this.rpcChain.then(run, run);
-    this.rpcChain = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
-  }
-
-  private async callUnsynchronized(
+  // Serialization lives in sendRecv's mutex (covers this path and method
+  // binding), so call() can be a thin pass-through.
+  async call(
     methodName: string,
     input?: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
@@ -493,5 +558,27 @@ export function disconnectClient(): void {
     sharedClient.disconnect();
     sharedClient = null;
     connectPromise = null;
+  }
+}
+
+/**
+ * The single entry point every tool/cache call should use. Resolves the
+ * shared client and, for idempotent reads, transparently retries exactly
+ * once on a transient transport failure (timeout reset, dropped socket) by
+ * reconnecting. Mutating methods are never auto-retried.
+ */
+export async function callRpc<T = Record<string, unknown>>(
+  method: string,
+  input?: Record<string, unknown>,
+): Promise<T> {
+  const client = await getClient();
+  try {
+    return (await client.call(method, input)) as T;
+  } catch (err: unknown) {
+    if (!shouldRetry(method, err)) throw err;
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(`[vizier-mcp] ${method} failed (${reason}); reconnecting and retrying once`);
+    const fresh = await getClient();
+    return (await fresh.call(method, input)) as T;
   }
 }

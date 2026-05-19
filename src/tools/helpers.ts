@@ -1,4 +1,4 @@
-import { getClient } from "../dfhack/client.js";
+import { callRpc } from "../dfhack/client.js";
 import {
   ensureLookups,
   enrichInventory,
@@ -32,8 +32,7 @@ export function paginatedResult<T>(items: T[], offset?: number, limit?: number):
 
 export async function callTool(method: string, input?: Record<string, unknown>): Promise<ToolResult> {
   try {
-    const client = await getClient();
-    const result = await client.call(method, input);
+    const result = await callRpc(method, input);
     return jsonResult(result);
   } catch (err: unknown) {
     return errorResult(err);
@@ -41,8 +40,7 @@ export async function callTool(method: string, input?: Record<string, unknown>):
 }
 
 export async function callToolTyped<T>(method: string, input?: Record<string, unknown>): Promise<T> {
-  const client = await getClient();
-  return client.callTyped<T>(method, input);
+  return callRpc<T>(method, input);
 }
 
 export async function enrichCreatureList(creatures: CreatureRaw[]): Promise<void> {

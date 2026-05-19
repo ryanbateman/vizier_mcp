@@ -31,6 +31,8 @@ const fakeClient = {
 
 vi.mock("../src/dfhack/client.js", () => ({
   getClient: async () => fakeClient,
+  callRpc: async (method: string, input?: Record<string, unknown>) =>
+    fakeClient.callTyped(method, input),
 }));
 
 const { ensureLookups, invalidateLookups, getReferenceDataset } = await import(

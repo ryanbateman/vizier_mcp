@@ -12,6 +12,13 @@ npm run inspector      # run MCP inspector for debugging
 npm test               # run unit tests
 ```
 
+On startup the server logs its version to stderr — make this the first
+diagnostic when a client misbehaves (it reveals stale npx/pinned installs):
+
+```
+[vizier-mcp] v0.2.x ready (DFHACK_HOST=… DFHACK_PORT=… DFHACK_RPC_TIMEOUT_MS=…)
+```
+
 CI (`.github/workflows/ci.yml`) builds and tests every push/PR on Node 18 and 20.
 Dependencies are pinned to exact versions; Dependabot proposes grouped weekly
 updates for npm packages and the GitHub Actions used by the workflows.

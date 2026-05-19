@@ -263,7 +263,23 @@ Because of the above, the `run_lua` tool is **disabled by default** — exposing
 |----------|---------|-------------|
 | `DFHACK_HOST` | `127.0.0.1` | DFHack remote server host |
 | `DFHACK_PORT` | `5000` | DFHack remote server port |
+| `DFHACK_RPC_TIMEOUT_MS` | `60000` | Per-RPC timeout. Raise it for very large fortresses (a slow `get_unit_list`/`get_block_list` can legitimately take a while); on timeout the connection is reset and the next call reconnects. |
 | `VIZIER_ENABLE_RUN_LUA` | _(unset)_ | Set to `1`/`true`/`yes` to register the `run_lua` tool. Disabled by default — only useful with user-authored `rpc.*` DFHack modules (see appendix). |
+
+## Troubleshooting
+
+**`Concurrent RPC call attempted — only one call allowed at a time`** — RPC
+serialization has been built in since **v0.2.0**, so this error means an
+**old build is running**. On startup the server logs its version to stderr:
+
+```
+[vizier-mcp] v0.2.x ready (DFHACK_HOST=… DFHACK_PORT=… DFHACK_RPC_TIMEOUT_MS=…)
+```
+
+If that line is missing or shows a pre-0.2.x version, your client is on a
+stale copy. Fixes: pin `@ryanbateman/vizier-mcp@latest` in the MCP config,
+clear the npx cache (`npx clear-npx-cache`), or rebuild a local checkout
+(`npm ci && npm run build`).
 
 ## Development
 

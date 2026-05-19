@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { readFileSync } from "fs";
+import { dirname, resolve } from "path";
+import { fileURLToPath } from "url";
 import { registerVersionTools } from "./tools/version.js";
 import { registerWorldTools } from "./tools/world.js";
 import { registerUnitTools } from "./tools/units.js";
@@ -18,9 +21,17 @@ function runLuaEnabled(): boolean {
   return /^(1|true|yes)$/i.test(process.env.VIZIER_ENABLE_RUN_LUA ?? "");
 }
 
+// Real version from package.json so the MCP handshake and startup log
+// reflect the build actually running (key for diagnosing stale npx/pinned
+// installs). package.json sits one level above build/index.js.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const VERSION = (
+  JSON.parse(readFileSync(resolve(__dirname, "../package.json"), "utf-8")) as { version: string }
+).version;
+
 const server = new McpServer({
   name: "vizier-mcp",
-  version: "0.1.0",
+  version: VERSION,
 });
 
 registerVersionTools(server);
@@ -47,6 +58,12 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  console.error(
+    `[vizier-mcp] v${VERSION} ready ` +
+      `(DFHACK_HOST=${process.env.DFHACK_HOST ?? "127.0.0.1"} ` +
+      `DFHACK_PORT=${process.env.DFHACK_PORT ?? "5000"} ` +
+      `DFHACK_RPC_TIMEOUT_MS=${process.env.DFHACK_RPC_TIMEOUT_MS ?? "60000"})`,
+  );
   // Best-effort: pre-fetch lookup tables so the first unit query is fast.
   // No-ops gracefully if DFHack isn't running yet (retried lazily on demand).
   void warmCache();
