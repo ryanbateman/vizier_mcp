@@ -206,24 +206,6 @@ flowchart LR
     C --> D[Dwarf Fortress<br/>game engine]
 ```
 
-## Releasing
-
-Releases are published to npm automatically by GitHub Actions using **Trusted Publishing** (GitHub OIDC — no long-lived npm token in the repo) with **signed provenance**.
-
-**One-time setup** (npm account owner): on npmjs.com → the package → **Settings → Trusted Publishers** → add a GitHub Actions publisher:
-
-- Repository: `ryanbateman/vizier_mcp`
-- Workflow filename: `publish.yml`
-- Environment: `release`
-
-**Cutting a release:**
-
-1. Bump `version` in `package.json`, commit, and push to `master`.
-2. Create a GitHub Release with tag `vX.Y.Z` (must match `package.json`).
-3. The `publish.yml` workflow runs `npm ci`, build, tests, a version-vs-tag guard, then `npm publish` — emitting provenance. Verify with the **Provenance** badge on npm and `npm audit signatures`.
-
-You can dry-run the whole pipeline without releasing via the workflow's **Run workflow** button (`workflow_dispatch`, `dry_run: true`). CI (`ci.yml`) builds and tests every push/PR on Node 18 and 20.
-
 ## Appendix: Why RunLua Is Blocked
 
 `RunLua` — the most powerful tool, giving arbitrary Lua access to the entire game state — is blocked by two independent restrictions in the DFHack source. Neither is fixable from the Vizier side. The restrictions make sense - arbitrarily accessing Lua Runtimes is something only the most foolish of Viziers would allow - but it somewhat restricts what this MCP server is capable of.
@@ -282,15 +264,8 @@ Noble titles and inventory are available via the RFR `get_unit` / `get_unit_list
 
 ## Development
 
-```bash
-git clone https://github.com/ryanbateman/vizier_mcp.git
-cd vizier_mcp
-npm ci
-npm run proto          # regenerate proto JSON from .proto files
-npm run build          # full build (proto + tsc)
-npm run inspector      # run MCP inspector for debugging
-npm test               # run unit tests
-```
+Local setup, the build/test loop, and the release process live in
+[DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## License
 
