@@ -269,46 +269,48 @@ Large responses from `list_units`, `list_materials`, `list_job_skills`, and `get
 
 ### 1. The `SF_ALLOW_REMOTE` permission flag
 
-Every method registered with the remote server carries a set of flags. Methods without `SF_ALLOW_REMOTE` are rejected for non-localhost clients. The check lives at [`RemoteServer.cpp#L257`](https://github.com/DFHack/dfhack/blob/develop/library/RemoteServer.cpp#L257):
+Every method registered with the remote server carries a set of flags (`SF_ALLOW_REMOTE = 4` in the `ServerFunctionFlags` enum). Methods without `SF_ALLOW_REMOTE` are rejected for non-localhost clients. The check lives in [`RemoteServer.cpp`](https://github.com/DFHack/dfhack/blob/e53187c8b975f71c5c356d9a587563009684bc89/library/RemoteServer.cpp#L264-L267):
 
 ```cpp
-if (((fn->flags & SF_ALLOW_REMOTE) != SF_ALLOW_REMOTE)
-    && strcmp(socket->GetClientAddr(), "127.0.0.1") != 0)
-    // rejected
+if (((fn->flags & SF_ALLOW_REMOTE) != SF_ALLOW_REMOTE) &&
+    strcmp(socket->GetClientAddr(), "127.0.0.1") != 0)
+{
+    stream.printerr("In call to {}: forbidden host: {}\n", fn->name, socket->GetClientAddr());
 ```
 
-`RunLua` is registered without this flag at [`RemoteTools.cpp#L576`](https://github.com/DFHack/dfhack/blob/develop/library/RemoteTools.cpp#L576):
+`RunLua` is registered without this flag in [`RemoteTools.cpp`](https://github.com/DFHack/dfhack/blob/e53187c8b975f71c5c356d9a587563009684bc89/library/RemoteTools.cpp#L554):
 
 ```cpp
-addMethod("RunLua", &CoreService::RunLua);  // no flags
+addFunction("RunLua", &CoreService::RunLua);  // no SF_ALLOW_REMOTE
 ```
 
-Compare to a working method: `addFunction("GetWorldInfo", GetWorldInfo, SF_ALLOW_REMOTE)`.
+Compare to a working method on the line above: `addFunction("GetWorldInfo", GetWorldInfo, SF_ALLOW_REMOTE);`.
 
 ### 2. The module name gate
 
-Even on localhost, `RunLua` requires the module name to match a whitelist pattern. The gate is at [`RemoteTools.cpp#L642`](https://github.com/DFHack/dfhack/blob/develop/library/RemoteTools.cpp#L642):
+Even on localhost, `RunLua` requires the module name to match a whitelist pattern. The gate is in [`RemoteTools.cpp`](https://github.com/DFHack/dfhack/blob/e53187c8b975f71c5c356d9a587563009684bc89/library/RemoteTools.cpp#L636-L651):
 
 ```cpp
 if (!valid) {
     args.rv = CR_WRONG_USAGE;
     out.printerr("Only modules named rpc.* or *.rpc or *-rpc may be called.\n");
+    return 0;
 }
 ```
 
-Only `rpc.*`, `*.rpc`, or `*-rpc` module names are accepted. Calling `dfhack.internal.getVersion` or any other built-in function is rejected. To use RunLua, you must create a Lua script at e.g. `hack/scripts/rpc/mymodule.lua` and call it with `module: "rpc.mymodule"`.
+Only module *names* matching `rpc.*`, `*.rpc`, or `*-rpc` are accepted. Calling `dfhack.internal.getVersion` or any other built-in function is rejected because its name fails this pattern — so RunLua only works against a purpose-written module whose name matches (conventionally a script under `hack/scripts/rpc/`, called as `module: "rpc.mymodule"`).
 
 ### What RunLua (or a clean API) Could Unlock
 
 | Currently Impossible | RunLua Would Enable |
 |---------------------|---------------------|
 | Current jobs (idle, mining, hauling) | `df.global.world.jobs.list` |
-| Health, injuries, mood | `unit.status.misc_traits` and `unit.body` |
+| Mood, stress, personality traits | `unit.status.misc_traits`, `unit.status.current_soul.personality` |
 | Legends and history | `dfhack.legends` module |
 | Burrow assignments | `unit.burrows` |
 | Relationships | `unit.relationships` |
 
-Noble titles and inventory are available via the RFR `get_unit` / `get_unit_list` tools.
+Noble titles and inventory are available via the RFR `get_unit` / `get_unit_list` tools. Wounds and blood level (`UnitDefinition.wounds`, `blood_count`/`blood_max`) are also already exposed there — only mood, stress and personality require RunLua.
 
 ## Environment Variables
 
