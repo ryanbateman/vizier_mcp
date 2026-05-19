@@ -31,18 +31,23 @@
     "type": "git",
     "url": "git+https://github.com/ryanbateman/vizier_mcp.git"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.0.0",
+    "npm": ">=11.5.1"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
-    "protobufjs": "^7.4.0",
-    "zod": "^3.24.0"
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "protobufjs": "7.5.8",
+    "zod": "3.25.76"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@vitest/coverage-v8": "^4.1.6",
-    "typescript": "^5.7.0",
-    "vitest": "^4.1.6"
+    "@types/node": "22.19.19",
+    "@vitest/coverage-v8": "4.1.6",
+    "typescript": "5.9.3",
+    "vitest": "4.1.6"
   }
 }

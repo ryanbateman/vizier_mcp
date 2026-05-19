@@ -1,0 +1,27 @@
+version: 2
+updates:
+  # npm dependencies — exact-pinned in package.json, so this is the
+  # review channel that keeps the pins patched.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        update-types:
+          - minor
+          - patch
+    # Majors come as separate PRs (default behaviour).
+
+  # Keep the SHA-pinned GitHub Actions current with reviewed bumps.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        update-types:
+          - minor
+          - patch

@@ -2,134 +2,78 @@
 
 Vizier is an MCP server/AI integration for Dwarf fortress that allows you to query the state of your ongoing game. It allows your LLM agent to act like a vizier - giving you a helpful assistant to ask about your dwarfs and their world - whether your legendary weaponsmith is accidentally assigned to hauling stone, what your world looks like, what your expedition leader is skilled in, and more. Similar to Dwarf Therapist, its intended as a read-only interface to help understand your world. And when it comes to terrible, potentially incorrect, treacherous advice that may come at a world-ending price, what better source than ~~AI~~ your trusted Vizier? Ahaha. Ha. Ha.
 
-## What You Can Do
+## Ask Your Vizier
 
-When running your LLM Agent (and the Vizier MCP server) on the same machine as DF (the typical setup), Vizier has mixed read access to your game. Here are real examples of what you can ask:
+You speak; the Vizier reads the entrails of your fortress and answers. Every scene below is something you can actually ask once Vizier is wired into your LLM client — no numeric IDs, no spreadsheets, just questions. (The Vizier only *reads* your game. It cannot dig your doom for you. That is your privilege alone.)
 
-### Workforce
+### 🐉 "A forgotten beast claws at the gate. Describe it."
 
-| Question | Tool | What You See |
-|----------|------|-------------|
-| "What's my population?" | `list_units` | Every dwarf, their profession, where they are, and who they belong to |
-| "Tell me about my expedition leader?" | `get_unit` by name | Who they are, their noble position, what they're wearing, and what they're skilled at — noble positions come from the RFR unit data, not `list_units` |
-| "What're most of my population's professions?" | `list_units` with `mask.profession` | Profession distribution across your fortress. Identify your Bard epidemic early. |
-| "Who's my best miner?" | `list_units` with `mask.skills` | Skill levels for every dwarf — find your specialists and hidden talent |
-| "Find a specific dwarf" | `list_units` with `name` | Locate any dwarf by first name, last name, English name, or nickname |
-| "Show every labor/skill mismatch" | Compare skills to enabled labors | Spot dwarves assigned to jobs they can't do, or locked out of jobs they're legendary at |
-| "What is this dwarf wearing?" | `get_unit` by name/id, or `list_units` with `include_inventory` | One call returns the unit's clothing and armor with material and item names already resolved |
-| "List my military squads" | `list_squads` | Squad rosters, leaders, and weapon assignments |
-| "What labors do dwarves have?" | `list_enums`, `list_job_skills` | Every labor, skill, and profession in the game with their attributes. Spot what you're missing. |
+*"Of course, my lord. Let us see what crawled up from the dark to end us this time."*
 
-### World & Materials
+Ask the Vizier to find the creature by name or sweep the region it lurks in — `get_unit` (by name) or `get_unit_list_inside` (a bounding box around your gate). Back comes its body, size, age, anything it's wearing or wielding, and any wounds it already carries. Pair it with `get_reference_data kind=creature_raws` and the Vizier will recite the species' body parts, attacks, and what it's *made of* — so you know whether your axedwarves or your prayers stand a better chance.
 
-| Question | Tool | What You See |
-|----------|------|-------------|
-| "What world is this?" | `get_world_info` | Your world's name, game mode, civilization, and site identity |
-| "What materials are here?" | `list_materials` | Every stone, metal, gem, and crafted material available on your map |
-| "Show me a creature's raw stats" | `get_reference_data kind=creature_raws` | Every creature type — body parts, attacks, materials — know what you're fighting |
-| "What plants grow here?" | `get_reference_data kind=plant_raws` | Every plant with its growths, products, and harvest seasons |
-| "List all building types" | `get_reference_data kind=building_defs` | All workshops, furnaces, and traps you can construct |
-| "What musical instruments exist?" | `get_reference_data kind=item_types` | Understand the musical instruments of your world — what they're made of, how they're played, and their sound descriptions |
+### ⚔️ "The siege is broken. Describe the injuries my militia took."
 
-### Map & Meta
+*"Bring me the rolls of the wounded. And the rolls of the no-longer-anything."*
 
-| Question | Tool | What You See |
-|----------|------|-------------|
-| "What does the map look like?" | `get_block_list` (RFR) | Tile types, terrain, and materials for any region of the map |
-| "Where's my camera?" | `get_view_info` (RFR) | What the player is currently looking at and how large the viewport is |
-| "Is the game paused?" | `get_pause_state` (RFR) | Whether the game is currently paused or running |
-| "What are the map dimensions?" | `get_map_info` (RFR) | Block count, embark position, and z-level depth |
+Triage with `list_units` (filter `alive` / `dead`), then `get_unit` each survivor. The Vizier reports each one's `wounds` (which body part, which layer), their blood level (`blood_count` vs `blood_max` — watch for the ones bleeding out), and exactly what armour was — or catastrophically *wasn't* — between them and the goblin's blade.
 
-### Data Detail: Core vs RFR
+### 👑 "Tell me of my expedition leader."
 
-Two APIs serve unit data. The Core API provides a workforce overview; the RFR API adds rich per-unit detail:
+*"A wise ruler knows their second-wisest advisor."*
 
-| Data | Core `list_units` | RFR `get_unit_list` |
-|------|:---:|:---:|
-| Name, race, gender, civ | ✓ | ✓ |
-| Grid-level position | ✓ | ✓ |
-| Sub-tile position (fractional) | ✗ | ✓ |
-| Facing direction | ✗ | ✓ |
-| Profession (with name resolution) | ✓ | ✓ |
-| Profession display color | ✗ | ✓ |
-| Skills (level, experience) | mask | ✓ |
-| Enabled labors | mask | ✗ |
-| Personality traits | mask | ✗ |
-| Age in years | ✗ | ✓ |
-| Physical appearance (hair, beard, colors) | ✗ | ✓ |
-| Body size | ✗ | ✓ |
-| Full inventory (every item, material, slot) | ✗ | ✓ |
-| Mounted/riding status | ✗ | ✓ |
-| Noble titles (Expedition Leader, Baron, Count, etc.) | ✗ | ✓ |
+`get_unit` by name returns their identity, race, age, noble position(s) (Expedition Leader, later Mayor or Baron), and a fully itemised account of what they're wearing — every sock, with its material named. Add `list_units` with `mask: { profession: true, skills: true }` and the Vizier will also tell you their profession and exactly how good they are at the things they claim to be good at.
 
-## If You're Connecting Remotely
+### 🛡️ "Is the militia actually ready?"
 
-When DF runs on a different machine to the agent and Vizier MCP server, access to some methods is restricted. This is a restriction of DFHack. DFHack's remote server applies a per-method `SF_ALLOW_REMOTE` permission flag. The table below shows exactly what works where.
+*"'Ready' is such an optimistic word, my lord. Let us check."*
 
-> **Important:** Remote connections require `"allow_remote": true` in DFHack's `dfhack-config/remote-server.json`. Without it, the server only binds to 127.0.0.1. If you do want to connect your Vizier MCP server to a remote DFHack instance, you will need to set the flag in the DFHack config (see below).
+`list_squads` gives rosters, leaders, and weapon assignments. `list_units` with `mask.skills` reveals who can actually *fight* versus who is holding an axe hopefully. Then `get_unit` (or `list_units` with `include_inventory`) shows who is genuinely armoured and armed — and who marched out in a dress.
 
-| Data | Local | Remote |
-|------|:-----:|:------:|
-| Core tools (units, materials, squads, etc.) | ✓ | ✓ |
-| RFR tools (map info, pause state, creature/plant raws, etc.) | ✓ | ✓ |
-| Unit inventory, appearance, age (RFR) | ✓ | ✓ |
-| Map tiles and terrain (RFR) | ✓ | ✓ |
-| RunCommand (DFHack console commands) | ✓ | ✗ |
-| RunLua (arbitrary Lua queries) | ✗* | ✗* |
+### 🎻 "Root out the Bard epidemic."
 
-\**RunLua has an additional module name restriction even locally. See [Why RunLua Is Blocked](#why-runlua-is-blocked).*
+*"Eleven bards. One fortress. No food. A familiar tragedy."*
 
-The only methods blocked for remote access are **RunLua** and **RunCommand** — these are intentionally local-only for security. All RemoteFortressReader methods are registered with `SF_ALLOW_REMOTE` and are accessible remotely when `allow_remote` is enabled.
+`list_units` with `mask: { profession: true, skills: true, labors: true }` lays bare the whole workforce: profession distribution, who is a *legendary* miner currently assigned to hauling rocks, and every labor/skill mismatch keeping your fortress poor and over-serenaded.
 
-## Architecture
+### 🗺️ "Read the world, and the ground beneath us."
 
-```mermaid
-flowchart LR
-    A[MCP Host<br/>any LLM client] <-->|stdio<br/>JSON-RPC| B[@ryanbateman/vizier-mcp<br/>MCP Server<br/>Node.js]
-    B <-->|TCP<br/>protobuf| C[DFHack<br/>Remote Server<br/>port 5000]
-    C --> D[Dwarf Fortress<br/>game engine]
+*"Geomancy is just paying attention, my lord."*
 
-    subgraph DFHack Remote Server
-        E[Core Methods<br/>always available]
-        F[RFR Methods<br/>remote-accessible]
-    end
+`get_world_info` (save, civilisation, mode), `get_map_info` (dimensions, embark, z-levels), and `get_block_list` (terrain, tiles, and materials for any region) map your holdings. `get_reference_data` (`materials`, `plant_raws`, `building_defs`) tells you what you can dig, grow, brew, and build here.
 
-    C --- E
-    C --- F
-```
+> A note on honesty, from your Vizier: I report only what DFHack will tell me. Current jobs, moods, stress, relationships and legends are sealed from me (see [the RunLua appendix](#appendix-why-runlua-is-blocked)). I will never invent them. I may, however, invent *advice*. Ahaha.
 
-## Prerequisites
+## Quickstart
 
-Vizier requires a running Dwarf Fortress instance with DFHack's remote server enabled. In `dfhack-config/remote-server.json`:
+### Prerequisites
+
+A running Dwarf Fortress with DFHack's remote server enabled. In `dfhack-config/remote-server.json`:
 
 ```json
 { "allow_remote": false, "port": 5000 }
 ```
 
-Set `"allow_remote": true` only if connecting from another machine (see [Remote Access](#if-youre-connecting-remotely)).
+Set `"allow_remote": true` only if DF runs on a different machine from the agent (see [Remote Access](#remote-access)).
 
-## Installation
-
-**Published package (recommended):**
+### Install
 
 ```bash
 npx @ryanbateman/vizier-mcp
 ```
 
-**From source:**
+Or from source:
 
 ```bash
 git clone https://github.com/ryanbateman/vizier_mcp.git
 cd vizier_mcp
-npm install && npm run build
+npm ci && npm run build
 node build/index.js
 ```
 
-## MCP Configuration
+### MCP client configuration
 
-Vizier reads `DFHACK_HOST` (default `127.0.0.1`) and `DFHACK_PORT` (default `5000`) from environment variables.
-
-**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+Vizier reads `DFHACK_HOST` (default `127.0.0.1`) and `DFHACK_PORT` (default `5000`) from the environment. **Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`) — **Cursor** (`.cursor/mcp.json`) uses the identical `mcpServers` shape:
 
 ```json
 {
@@ -137,33 +81,13 @@ Vizier reads `DFHACK_HOST` (default `127.0.0.1`) and `DFHACK_PORT` (default `500
     "vizier": {
       "command": "npx",
       "args": ["@ryanbateman/vizier-mcp"],
-      "env": {
-        "DFHACK_HOST": "127.0.0.1",
-        "DFHACK_PORT": "5000"
-      }
+      "env": { "DFHACK_HOST": "127.0.0.1", "DFHACK_PORT": "5000" }
     }
   }
 }
 ```
 
-**Cursor** (`.cursor/mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "vizier": {
-      "command": "npx",
-      "args": ["@ryanbateman/vizier-mcp"],
-      "env": {
-        "DFHACK_HOST": "127.0.0.1",
-        "DFHACK_PORT": "5000"
-      }
-    }
-  }
-}
-```
-
-**OpenCode** (`.opencode/opencode.json`):
+**OpenCode** (`.opencode/opencode.json`) uses its own shape:
 
 ```jsonc
 {
@@ -172,22 +96,17 @@ Vizier reads `DFHACK_HOST` (default `127.0.0.1`) and `DFHACK_PORT` (default `500
       "type": "local",
       "command": ["npx", "@ryanbateman/vizier-mcp"],
       "enabled": true,
-      "environment": {
-        "DFHACK_HOST": "127.0.0.1",
-        "DFHACK_PORT": "5000"
-      }
+      "environment": { "DFHACK_HOST": "127.0.0.1", "DFHACK_PORT": "5000" }
     }
   }
 }
 ```
 
-> **From source:** Replace the `npx` command with `["node", "/path/to/vizier_mcp/build/index.js"]`.
+> **From source:** replace `"command"/"args"` with `["node", "/path/to/vizier_mcp/build/index.js"]`.
 
-> **Remote connections:** DFHack only accepts localhost by default. To connect from another machine, set `"allow_remote": true` in `dfhack-config/remote-server.json`. `RunLua` and `RunCommand` remain blocked for non-localhost clients regardless of this setting.
+## Tool Reference
 
-## All MCP Tools
-
-### Always Available (Core API)
+### Core API tools
 
 | Tool | Description | Key Parameters |
 |------|-------------|---------------|
@@ -202,7 +121,7 @@ Vizier reads `DFHACK_HOST` (default `127.0.0.1`) and `DFHACK_PORT` (default `500
 | `list_squads` | Military squads and members | — |
 | `set_unit_labors` | Enable/disable labors per unit | `changes[]` |
 
-### RemoteFortressReader (RFR) API
+### RemoteFortressReader (RFR) tools
 
 | Tool | Description | Key Parameters |
 |------|-------------|---------------|
@@ -214,18 +133,16 @@ Vizier reads `DFHACK_HOST` (default `127.0.0.1`) and `DFHACK_PORT` (default `500
 | `get_view_info` | Current viewport position and size | — |
 | `get_pause_state` | Whether the game is paused | — |
 
-Creature raws, plant raws, building defs, item types, tiletypes, language and the full material dump are served by **`get_reference_data`** (cached per save) and as **MCP resources** — see below.
-
-### Reference Data: tool + resources
+### Reference data: tool + resources
 
 Static game reference data is cached per save and exposed two ways so the model rarely needs a repeat call:
 
-- **Tool:** `get_reference_data({ kind, type?, offset?, limit? })` where `kind` is one of `materials`, `item_types`, `enums`, `job_skills`, `creature_raws`, `plant_raws`, `building_defs`, `tiletypes`, `language`.
+- **Tool:** `get_reference_data({ kind, type?, offset?, limit? })` — `kind` ∈ `materials`, `item_types`, `enums`, `job_skills`, `creature_raws`, `plant_raws`, `building_defs`, `tiletypes`, `language`.
 - **Resources:** each dataset is also an MCP resource (`vizier://reference/materials`, `vizier://reference/job-skills`, …) that capable clients read once and cache.
 
-Unit and item tool responses (`get_unit`, `list_units`, `get_unit_list`, …) already have profession, skill, labor, flag, race, material and item **names resolved server-side**, so you usually do not need a reference call just to decode IDs. The cache hits DFHack at most once per save (revalidated at most once per 60s and dropped on reconnect).
+Unit and item responses (`get_unit`, `list_units`, `get_unit_list`, …) already have profession, skill, labor, flag, race, material and item **names resolved server-side**, so you usually do not need a reference call just to decode IDs. The cache hits DFHack at most once per save (revalidated at most once per 60s, dropped on reconnect).
 
-### `list_units` Detail Options
+### `list_units` detail mask
 
 Adding `mask` returns richer data with human-readable names resolved from DFHack's own enums at runtime:
 
@@ -245,27 +162,71 @@ Adding `mask` returns richer data with human-readable names resolved from DFHack
 | `labors` | Enabled labors | `name` per labor |
 | `miscTraits` | Personality traits | — |
 
-All name lookups are fetched dynamically from the connected DFHack instance — no hardcoded mappings.
+**Name search:** filter units by case-insensitive substring across first/last/English/nickname, e.g. `list_units({ scan_all: true, name: "besmar", mask: { profession: true } })`.
 
-### Name Search
+**Pagination:** `list_units`, `list_materials`, `list_job_skills`, and `get_reference_data` accept `offset`/`limit` and return `{ total, offset, limit, items: [...] }`.
 
-Filter units by substring match across first name, last name, English name, and nickname:
+### Core vs RFR unit data
 
+| Data | Core `list_units` | RFR `get_unit` / `get_unit_list` |
+|------|:---:|:---:|
+| Name, race, gender, civ | ✓ | ✓ |
+| Grid-level position | ✓ | ✓ |
+| Sub-tile position / facing | ✗ | ✓ |
+| Profession (name-resolved) | ✓ | ✓ |
+| Skills (level, experience) | mask | ✗ |
+| Enabled labors | mask | ✗ |
+| Personality traits | mask | ✗ |
+| Age / appearance / body size | ✗ | ✓ |
+| Full inventory (item, material, slot) | ✗ | ✓ |
+| Wounds, blood level | ✗ | ✓ |
+| Noble titles (Expedition Leader, Baron, …) | ✗ | ✓ |
+
+### Remote access
+
+When DF runs on a different machine to the agent, DFHack restricts some methods via a per-method `SF_ALLOW_REMOTE` flag. Remote connections also require `"allow_remote": true` in `dfhack-config/remote-server.json` (otherwise the server binds only to `127.0.0.1`).
+
+| Capability | Local | Remote |
+|------------|:-----:|:------:|
+| Core tools (units, materials, squads, …) | ✓ | ✓ |
+| RFR tools (map info, pause state, raws, …) | ✓ | ✓ |
+| Unit inventory, appearance, age (RFR) | ✓ | ✓ |
+| Map tiles and terrain (RFR) | ✓ | ✓ |
+| RunCommand (DFHack console commands) | ✓ | ✗ |
+| RunLua (arbitrary Lua queries) | ✗* | ✗* |
+
+\* RunLua is additionally gated even locally — see [the appendix](#appendix-why-runlua-is-blocked).
+
+### Architecture
+
+```mermaid
+flowchart LR
+    A[MCP Host<br/>any LLM client] <-->|stdio<br/>JSON-RPC| B[@ryanbateman/vizier-mcp<br/>MCP Server<br/>Node.js]
+    B <-->|TCP<br/>protobuf| C[DFHack<br/>Remote Server<br/>port 5000]
+    C --> D[Dwarf Fortress<br/>game engine]
 ```
-list_units({ scan_all: true, name: "besmar", mask: { profession: true } })
-```
 
-### Pagination
+## Releasing
 
-Large responses from `list_units`, `list_materials`, `list_job_skills`, and `get_reference_data` use `offset`/`limit`:
+Releases are published to npm automatically by GitHub Actions using **Trusted Publishing** (GitHub OIDC — no long-lived npm token in the repo) with **signed provenance**.
 
-```json
-{ "total": 174, "offset": 0, "limit": 20, "items": [...] }
-```
+**One-time setup** (npm account owner): on npmjs.com → the package → **Settings → Trusted Publishers** → add a GitHub Actions publisher:
 
-## Why RunLua Is Blocked
+- Repository: `ryanbateman/vizier_mcp`
+- Workflow filename: `publish.yml`
+- Environment: `release`
 
-`RunLua` — the most powerful tool, giving arbitrary Lua access to the entire game state — is blocked by two independent restrictions in the DFHack source. Neither is fixable from the Vizier side. The restrictions make sense - arbitrarily accessing Lua Runtimes is something only the most foolish of Viziers would allow - but it somewhat restricts what this MCP server is capable of. 
+**Cutting a release:**
+
+1. Bump `version` in `package.json`, commit, and push to `master`.
+2. Create a GitHub Release with tag `vX.Y.Z` (must match `package.json`).
+3. The `publish.yml` workflow runs `npm ci`, build, tests, a version-vs-tag guard, then `npm publish` — emitting provenance. Verify with the **Provenance** badge on npm and `npm audit signatures`.
+
+You can dry-run the whole pipeline without releasing via the workflow's **Run workflow** button (`workflow_dispatch`, `dry_run: true`). CI (`ci.yml`) builds and tests every push/PR on Node 18 and 20.
+
+## Appendix: Why RunLua Is Blocked
+
+`RunLua` — the most powerful tool, giving arbitrary Lua access to the entire game state — is blocked by two independent restrictions in the DFHack source. Neither is fixable from the Vizier side. The restrictions make sense - arbitrarily accessing Lua Runtimes is something only the most foolish of Viziers would allow - but it somewhat restricts what this MCP server is capable of.
 
 ### 1. The `SF_ALLOW_REMOTE` permission flag
 
@@ -300,7 +261,7 @@ if (!valid) {
 
 Only module *names* matching `rpc.*`, `*.rpc`, or `*-rpc` are accepted. Calling `dfhack.internal.getVersion` or any other built-in function is rejected because its name fails this pattern — so RunLua only works against a purpose-written module whose name matches (conventionally a script under `hack/scripts/rpc/`, called as `module: "rpc.mymodule"`).
 
-### What RunLua (or a clean API) Could Unlock
+### What RunLua (or a clean API) could unlock
 
 | Currently Impossible | RunLua Would Enable |
 |---------------------|---------------------|
@@ -324,7 +285,7 @@ Noble titles and inventory are available via the RFR `get_unit` / `get_unit_list
 ```bash
 git clone https://github.com/ryanbateman/vizier_mcp.git
 cd vizier_mcp
-npm install
+npm ci
 npm run proto          # regenerate proto JSON from .proto files
 npm run build          # full build (proto + tsc)
 npm run inspector      # run MCP inspector for debugging
