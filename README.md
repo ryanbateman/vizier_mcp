@@ -255,12 +255,15 @@ Only module *names* matching `rpc.*`, `*.rpc`, or `*-rpc` are accepted. Calling 
 
 Noble titles and inventory are available via the RFR `get_unit` / `get_unit_list` tools. Wounds and blood level (`UnitDefinition.wounds`, `blood_count`/`blood_max`) are also already exposed there — only mood, stress and personality require RunLua.
 
+Because of the above, the `run_lua` tool is **disabled by default** — exposing a tool that only works with bespoke `rpc.*` modules just leads models to attempt it and fail. Enable it only if you have authored such modules: set `VIZIER_ENABLE_RUN_LUA=1`. Even when enabled, Vizier validates the module name client-side and rejects anything that isn't `rpc.*` / `*.rpc` / `*-rpc` before contacting DFHack.
+
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DFHACK_HOST` | `127.0.0.1` | DFHack remote server host |
 | `DFHACK_PORT` | `5000` | DFHack remote server port |
+| `VIZIER_ENABLE_RUN_LUA` | _(unset)_ | Set to `1`/`true`/`yes` to register the `run_lua` tool. Disabled by default — only useful with user-authored `rpc.*` DFHack modules (see appendix). |
 
 ## Development
 

@@ -10,6 +10,14 @@ import { registerLuaTool } from "./tools/lua.js";
 import { disconnectClient } from "./dfhack/client.js";
 import { warmCache } from "./lookup-cache.js";
 
+// run_lua is opt-in: DFHack only permits modules named rpc.* / *.rpc / *-rpc
+// (see README appendix), so without a user-authored rpc.* script the tool is
+// non-functional and only misleads the model. Enable explicitly if you have
+// such modules: VIZIER_ENABLE_RUN_LUA=1 (also: true / yes).
+function runLuaEnabled(): boolean {
+  return /^(1|true|yes)$/i.test(process.env.VIZIER_ENABLE_RUN_LUA ?? "");
+}
+
 const server = new McpServer({
   name: "vizier-mcp",
   version: "0.1.0",
@@ -21,7 +29,7 @@ registerUnitTools(server);
 registerReferenceTools(server);
 registerReferenceResources(server);
 registerMapTools(server);
-registerLuaTool(server);
+if (runLuaEnabled()) registerLuaTool(server);
 
 let shuttingDown = false;
 
