@@ -18,9 +18,9 @@ The goal of Vizier is to help a user understand what is happening in their fortr
 
 Ask the Vizier to find the creature by name or sweep the region it lurks in — `get_unit` (by name) or `get_unit_list_inside` (a bounding box around your gate). Back comes its body, size, age, anything it's wearing or wielding, and any wounds it already carries. Pair it with `get_reference_data kind=creature_raws` and the Vizier will recite the species' body parts, attacks, and what it's *made of* — so you know whether your axedwarves or your prayers stand a better chance.
 
-### "What in the world are the bards even playing?"
+### "What are those accursed things the bards are playing?"
 
-*"Eleven of them, my lord, and not one plays the same cursed thing twice."*
+*"A terrible set of contraptions, my liege, none of which the wretches play well."*
 
 Every world dreams up its own instruments — their names, their parts, and the unholy ways they are sounded. `get_reference_data kind=item_types` is the full item catalogue; the Vizier sifts it for the entries that carry an `instrument` block and reports each one's name, its named `pieces` (the bits that warp, snap, or go missing), its `description`, its size and `value`, the pitch and volume range it can inflict, and *how* it is played — plucked, bowed, blown over a reed, or struck until it stops.
 
@@ -30,7 +30,7 @@ Every world dreams up its own instruments — their names, their parts, and the 
 
 Triage with `list_units` (filter `alive` / `dead`), then `get_unit` each survivor. The Vizier reports each one's `wounds` (which body part, which layer), their blood level (`blood_count` vs `blood_max` — watch for the ones bleeding out), and exactly what armour was — or catastrophically *wasn't* — between them and the goblin's blade.
 
-### "Tell me of my expedition leader."
+### "Tell me of my expedition leader - are they fit to lead?"
 
 *"A wise ruler knows their second-wisest advisor."*
 
@@ -60,7 +60,7 @@ Triage with `list_units` (filter `alive` / `dead`), then `get_unit` each survivo
 
 ### Prerequisites
 
-A running Dwarf Fortress with DFHack's remote server enabled. Check `dfhack-config/remote-server.json` and you should see something like this:
+To start, you will need a running Dwarf Fortress game with DFHack and its remote server enabled. Check `dfhack-config/remote-server.json` and you should see something like this:
 
 ```json
 { "allow_remote": false, "port": 5000 }
