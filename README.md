@@ -8,9 +8,9 @@ Vizier is an MCP server/AI integration for Dwarf fortress that allows you to que
 
 Similar to Dwarf Therapist, its intended as a read-only interface to help understand your world. And when it comes to terrible, potentially incorrect, treacherous advice that may come at a world-ending price, what better source than ~~AI~~ your trusted Vizier? Ahaha. Ha. Ha.
 
-## Goals
+## Uses
 
-The goal of Vizier is to help a user understand what is happening in their fortress more easily (much like, you know, a real Vizier.) The Vizier only *reads* your game - it doesn't play or affect the gameplay, in part due to limitations in its design, in part through design choice. Below are some example questions you could ask your LLM.
+The goal of Vizier is to help a user understand what is happening in their fortress more easily (much like, you know, a real Vizier.) The Vizier only *reads* your game - it doesn't play or affect the gameplay, in part due to limitations in its design, in part through design choice. Below are some example questions you could ask your LLM (but I have been discovering more as I play and would welcome some examples from others!).
 
 ### "A forgotten beast claws at the gate. Describe it."
 
