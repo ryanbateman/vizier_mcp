@@ -18,6 +18,27 @@ const NAMES_RESOLVED_NOTE =
   "resolved in the response — you do NOT need a separate list_enums / " +
   "get_reference_data call to decode IDs.";
 
+type UnitMask = {
+  profession?: boolean;
+  skills?: boolean;
+  labors?: boolean;
+  miscTraits?: boolean;
+};
+
+/**
+ * Summary roster promises profession + top skill, so it must request those
+ * fields from ListUnits — otherwise topSkill is always null and
+ * professionName is missing. Merge with any explicit mask the caller passed.
+ * Exported for unit testing; consumed inline by list_units.
+ */
+export function resolveListUnitsMask(
+  summary: boolean | undefined,
+  mask: UnitMask | undefined,
+): UnitMask | undefined {
+  if (!summary) return mask;
+  return { ...(mask ?? {}), profession: true, skills: true };
+}
+
 function unitSearchString(name: CreatureRaw["name"] | UnitBase["name"]): string {
   if (!name) return "";
   if (typeof name === "string") return name.toLowerCase();
@@ -68,7 +89,8 @@ export function registerUnitTools(server: McpServer) {
         if (dead !== undefined) input["dead"] = dead;
         if (alive !== undefined) input["alive"] = alive;
         if (sane !== undefined) input["sane"] = sane;
-        if (mask !== undefined) input["mask"] = mask;
+        const effectiveMask = resolveListUnitsMask(summary, mask);
+        if (effectiveMask !== undefined) input["mask"] = effectiveMask;
         if (scan_all !== undefined) {
           input["scanAll"] = scan_all;
         } else if (Object.keys(input).length > 0) {
