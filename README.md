@@ -1,75 +1,61 @@
 # Vizier MCP
 
-Vizier is an MCP server/AI integration for Dwarf fortress that allows you to query the state of your ongoing game. It allows your LLM agent to act like a vizier - giving you a helpful assistant to ask about your dwarfs and their world - whether your legendary weaponsmith is accidentally assigned to hauling stone, what your world looks like, what your expedition leader is skilled in, and more. Similar to Dwarf Therapist, its intended as a read-only interface to help understand your world. And when it comes to terrible, potentially incorrect, treacherous advice that may come at a world-ending price, what better source than ~~AI~~ your trusted Vizier? Ahaha. Ha. Ha.
+Vizier is an MCP server/AI integration for Dwarf fortress that allows you to query the state of your ongoing game. It allows your LLM agent to act like a vizier - giving you a helpful assistant to ask about your dwarfs and their world - whether your legendary weaponsmith is accidentally assigned to hauling stone, what your world looks like, what your expedition leader is skilled in, and more.  
+Similar to Dwarf Therapist, its intended as a read-only interface to help understand your world. And when it comes to terrible, potentially incorrect, treacherous advice that may come at a world-ending price, what better source than ~~AI~~ your trusted Vizier? Ahaha. Ha. Ha.
 
-## Ask Your Vizier
+## Goals
 
-You speak; the Vizier reads the entrails of your fortress and answers. Every scene below is something you can actually ask once Vizier is wired into your LLM client — no numeric IDs, no spreadsheets, just questions. (The Vizier only *reads* your game. It cannot dig your doom for you. That is your privilege alone.)
+The goal of Vizier is to help a user understand what is happening in their fortress more easily (much like, you know, a real Vizier.) The Vizier only *reads* your game - it doesn't play or affect the gameplay, in part due to limitations in its design, in part through design choice. Below are some example questions you could ask your LLM.
 
-### 🐉 "A forgotten beast claws at the gate. Describe it."
+### "A forgotten beast claws at the gate. Describe it."
 
 *"Of course, my lord. Let us see what crawled up from the dark to end us this time."*
 
 Ask the Vizier to find the creature by name or sweep the region it lurks in — `get_unit` (by name) or `get_unit_list_inside` (a bounding box around your gate). Back comes its body, size, age, anything it's wearing or wielding, and any wounds it already carries. Pair it with `get_reference_data kind=creature_raws` and the Vizier will recite the species' body parts, attacks, and what it's *made of* — so you know whether your axedwarves or your prayers stand a better chance.
 
-### ⚔️ "The siege is broken. Describe the injuries my militia took."
+### "The siege is broken. Describe the injuries my militia took."
 
 *"Bring me the rolls of the wounded. And the rolls of the no-longer-anything."*
 
 Triage with `list_units` (filter `alive` / `dead`), then `get_unit` each survivor. The Vizier reports each one's `wounds` (which body part, which layer), their blood level (`blood_count` vs `blood_max` — watch for the ones bleeding out), and exactly what armour was — or catastrophically *wasn't* — between them and the goblin's blade.
 
-### 👑 "Tell me of my expedition leader."
+### "Tell me of my expedition leader."
 
 *"A wise ruler knows their second-wisest advisor."*
 
 `get_unit` by name returns their identity, race, age, noble position(s) (Expedition Leader, later Mayor or Baron), and a fully itemised account of what they're wearing — every sock, with its material named. Add `list_units` with `mask: { profession: true, skills: true }` and the Vizier will also tell you their profession and exactly how good they are at the things they claim to be good at.
 
-### 🛡️ "Is the militia actually ready?"
+### "Is the militia actually ready?"
 
 *"'Ready' is such an optimistic word, my lord. Let us check."*
 
 `list_squads` gives rosters, leaders, and weapon assignments. `list_units` with `mask.skills` reveals who can actually *fight* versus who is holding an axe hopefully. Then `get_unit` (or `list_units` with `include_inventory`) shows who is genuinely armoured and armed — and who marched out in a dress.
 
-### 🎻 "Root out the Bard epidemic."
+### "Root out the Bard epidemic."
 
 *"Eleven bards. One fortress. No food. A familiar tragedy."*
 
-`list_units` with `mask: { profession: true, skills: true, labors: true }` lays bare the whole workforce: profession distribution, who is a *legendary* miner currently assigned to hauling rocks, and every labor/skill mismatch keeping your fortress poor and over-serenaded.
+`list_units` with `mask: { profession: true, skills: true, labors: true }` lays bare the whole workforce: profession distribution, who is a *legendary* miner currently assigned to hauling rocks, and every labor/skill mismatch keeping your fortress poor and over-serenaded. This is great for seeing where you are under-utilising specialists or where you can redistribute generalists. 
 
-### 🗺️ "Read the world, and the ground beneath us."
+### "Read the world, and the ground beneath us."
 
 *"Geomancy is just paying attention, my lord."*
 
 `get_world_info` (save, civilisation, mode), `get_map_info` (dimensions, embark, z-levels), and `get_block_list` (terrain, tiles, and materials for any region) map your holdings. `get_reference_data` (`materials`, `plant_raws`, `building_defs`) tells you what you can dig, grow, brew, and build here.
 
-> A note on honesty, from your Vizier: I report only what DFHack will tell me. Current jobs, moods, stress, relationships and legends are sealed from me (see [the RunLua appendix](#appendix-why-runlua-is-blocked)). I will never invent them. I may, however, invent *advice*. Ahaha.
+> Vizier reports only what DFHack will tell it. Current jobs, moods, stress, relationships and legends are not visible (see [the RunLua appendix](#appendix-why-runlua-is-blocked)). There is, of course, a good chance that the ~~AI~~ your trusted Vizier will lie and say that there is. Ahaha.
 
 ## Quickstart
 
 ### Prerequisites
 
-A running Dwarf Fortress with DFHack's remote server enabled. In `dfhack-config/remote-server.json`:
+A running Dwarf Fortress with DFHack's remote server enabled. Check `dfhack-config/remote-server.json` and you should see something like this:
 
 ```json
 { "allow_remote": false, "port": 5000 }
 ```
 
-Set `"allow_remote": true` only if DF runs on a different machine from the agent (see [Remote Access](#remote-access)).
-
-### Install
-
-```bash
-npx @ryanbateman/vizier-mcp
-```
-
-Or from source:
-
-```bash
-git clone https://github.com/ryanbateman/vizier_mcp.git
-cd vizier_mcp
-npm ci && npm run build
-node build/index.js
-```
+Vizier and/or your AI agent will need to run on the same machine as DFHack. If you want to run it elsewhere, set `"allow_remote": true` in the config, but note that if DF runs on a different machine from the agent you will see more limited functionality (see [Remote Access](#remote-access)).
 
 ### MCP client configuration
 
@@ -103,6 +89,22 @@ Vizier reads `DFHACK_HOST` (default `127.0.0.1`) and `DFHACK_PORT` (default `500
 ```
 
 > **From source:** replace `"command"/"args"` with `["node", "/path/to/vizier_mcp/build/index.js"]`.
+
+
+### Manual Install
+
+```bash
+npx @ryanbateman/vizier-mcp
+```
+
+Or from source:
+
+```bash
+git clone https://github.com/ryanbateman/vizier_mcp.git
+cd vizier_mcp
+npm ci && npm run build
+node build/index.js
+```
 
 ## Tool Reference
 
