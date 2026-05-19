@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="A terrible Vizier, my lord? Why, what a wonderful idea. Of course they would have to be... trustworthy..." width="100%">
+</p>
+
 # Vizier MCP
 
 Vizier is an MCP server/AI integration for Dwarf fortress that allows you to query the state of your ongoing game. It allows your LLM agent to act like a vizier - giving you a helpful assistant to ask about your dwarfs and their world - whether your legendary weaponsmith is accidentally assigned to hauling stone, what your world looks like, what your expedition leader is skilled in, and more.  
