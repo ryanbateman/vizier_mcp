@@ -40,7 +40,7 @@ Triage with `list_units` (filter `alive` / `dead`), then `get_unit` each survivo
 
 *"A wise ruler knows their second-wisest advisor."*
 
-`get_unit` by name returns their identity, race, age, noble position(s) (Expedition Leader, later Mayor or Baron), and a fully itemised account of what they're wearing — every sock, with its material named. Add `list_units` with `mask: { profession: true, skills: true }` and the Vizier will also tell you their profession and exactly how good they are at the things they claim to be good at.
+`describe_unit name=<who>` gives the Vizier the whole sketch in one breath: their full name, race, age, noble position(s) (Expedition Leader, later Mayor or Baron), profession, their top skills and how many they have actually trained, their enabled labors, blood level and any wounds they carry, body size, and a fully itemised account of what they're wearing — every sock, with its material named. *Behind the curtain it composes `get_unit` (RFR) and `list_units` (Core, profession+skills+labors mask) and joins them by id, so you don't have to.*
 
 ### "Is the militia actually ready?"
 
@@ -52,7 +52,7 @@ Triage with `list_units` (filter `alive` / `dead`), then `get_unit` each survivo
 
 *"Eleven bards. One fortress. No food. A familiar tragedy."*
 
-`list_units` with `mask: { profession: true, skills: true, labors: true }` lays bare the whole workforce: profession distribution, who is a *legendary* miner currently assigned to hauling rocks, and every labor/skill mismatch keeping your fortress poor and over-serenaded. This is great for seeing where you are under-utilising specialists or where you can redistribute generalists. 
+`workforce_report` lays the whole rot bare in a single call: the profession distribution, the *underused legends* (a legendary miner currently called Carpenter), the *mismatches* (a Planter whose only real talent is Poetry), the *idle generalists* with no skill above journeyman, and the single best practitioner of every skill in the fort. The Vizier names names — perfect for deciding who to reassign and who to forgive. *Behind the curtain it's `list_units` with the full mask, run through a profession-skill alignment map so the misfits surface themselves.*
 
 ### "Read the world, and the ground beneath us."
 
