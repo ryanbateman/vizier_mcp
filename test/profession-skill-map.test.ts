@@ -21,6 +21,14 @@ describe("profession-skill-map", () => {
     expect(PROFESSION_ALIGNED_SKILL.Craftsman).toBeUndefined();
     expect(PROFESSION_ALIGNED_SKILL.Peasant).toBeUndefined();
     expect(PROFESSION_ALIGNED_SKILL.Merchant).toBeUndefined();
+    expect(PROFESSION_ALIGNED_SKILL.Administrator).toBeUndefined();
+  });
+
+  it("covers the auxiliary craft roles that show up in real forts", () => {
+    expect(PROFESSION_ALIGNED_SKILL["Gem Cutter"]).toBe("Gem Cutting");
+    expect(PROFESSION_ALIGNED_SKILL["Lye Maker"]).toBe("Lye Making");
+    expect(PROFESSION_ALIGNED_SKILL["Potash Maker"]).toBe("Potash Making");
+    expect(PROFESSION_ALIGNED_SKILL.Surgeon).toBe("Surgery");
   });
 
   it("reverse-map gives an expected profession for canonical skills", () => {

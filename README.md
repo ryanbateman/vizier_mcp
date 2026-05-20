@@ -125,6 +125,8 @@ node build/index.js
 
 ## Tool Reference
 
+Tools fall into two groups. **Base tools** wrap a single DFHack RPC (Core API or RFR) and return its data with names resolved server-side — the primitives. **Composite narrative tools** compose those primitives, apply projection and aggregation, and answer a specific [Uses](#uses) question in one call. Reach for a composite tool when a question is in the Uses list; reach for the base tools when you need to drill in.
+
 ### Core API tools
 
 | Tool | Description | Key Parameters |
@@ -151,6 +153,16 @@ node build/index.js
 | `get_map_info` | Map dimensions and embark position | — |
 | `get_view_info` | Current viewport position and size | — |
 | `get_pause_state` | Whether the game is paused | — |
+
+### Composite narrative tools
+
+Each composes one or more base tools, applies projection/aggregation, and ships its own [Uses](#uses) example. Bounded, small payloads — use these first.
+
+| Tool | Answers | Composes |
+|------|---------|----------|
+| `get_fortress_overview` | "Where am I, and who do I have to work with?" | `GetWorldInfo` + `GetMapInfo` + `ListUnits` (profession+skills mask) |
+| `describe_unit` | "Tell me of my expedition leader — are they fit to lead?" | `GetUnitList` (RFR) + `ListUnits` (profession+skills+labors), joined by id |
+| `workforce_report` | "Root out the Bard epidemic." | `ListUnits` (full mask) + a profession→skill alignment map |
 
 ### Reference data: tool + resources
 

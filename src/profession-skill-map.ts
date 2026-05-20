@@ -46,6 +46,14 @@ export const PROFESSION_ALIGNED_SKILL: Record<string, string> = {
   "Strand Extractor": "Extract Strands",
   Mechanic: "Mechanics",
   "Animal Trainer": "Animal Training",
+  "Gem Cutter": "Gem Cutting",
+  "Lye Maker": "Lye Making",
+  "Potash Maker": "Potash Making",
+
+  // Medical
+  Surgeon: "Surgery",
+  Diagnostician: "Diagnosis",
+  "Wound Dresser": "Wound Dressing",
 
   // Food
   Fisherman: "Fishing",
@@ -60,7 +68,10 @@ export const PROFESSION_ALIGNED_SKILL: Record<string, string> = {
   Grower: "Growing",
 
   // Records
-  Administrator: "Record Keeping",
+  // (Administrator deliberately omitted — it's a coordination/noble role,
+  // not a craft. Real administrators excel at Consoling/Negotiation/
+  // Organization, not one canonical skill. Treating it as Record Keeping
+  // misflags effective leaders as mismatched.)
   Clerk: "Record Keeping",
 };
 
