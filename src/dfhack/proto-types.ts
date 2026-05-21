@@ -72,6 +72,8 @@ export interface UnitBase {
   flags3Names?: string[];
   deathFlags?: number;
   deathFlagsNames?: string[];
+  /** Unique death-event id; higher = more recent. -1 / undefined when alive. */
+  deathId?: number;
   skills?: Array<{ id: number; name?: string; nameNoun?: string }>;
   labors?: number[] | Array<{ id: number; name?: string }>;
   race?: number | { matType: number; matIndex: number };
