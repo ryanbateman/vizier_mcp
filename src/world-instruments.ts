@@ -76,8 +76,15 @@ export interface InstrumentSummary {
   building: boolean;     // flags.placedAsBuilding
   pieces: number;        // pieces.length
   description?: string;
-  /** Materials the instrument can be made of (from the flags). */
-  materials: string[];
+  /**
+   * Materials DF permits this instrument to be built from. Sparse: most
+   * procedural instruments have a single material baked into the
+   * description (e.g. "huge ceramic instrument") with no flag set, so
+   * this array is `[]` for them. Populated only for instruments that
+   * accept multiple material categories. Read the description for the
+   * actual material a built instance will be made of.
+   */
+  permittedMaterials: string[];
 }
 
 export interface InstrumentVerbose extends InstrumentSummary {
@@ -127,7 +134,7 @@ function civFromId(id: string): string {
 }
 
 /** Decode the per-instrument material allow-list flags into readable names. */
-function materialsFromFlags(flags?: InstrumentFlagsRaw): string[] {
+function permittedMaterialsFromFlags(flags?: InstrumentFlagsRaw): string[] {
   if (!flags) return [];
   const out: string[] = [];
   if (flags.metalMat) out.push("metal");
@@ -153,7 +160,7 @@ function summarise(entry: ItemTypeEntry): InstrumentSummary | undefined {
     building: inst.flags?.placedAsBuilding === true,
     pieces: inst.pieces?.length ?? 0,
     description: inst.description,
-    materials: materialsFromFlags(inst.flags),
+    permittedMaterials: permittedMaterialsFromFlags(inst.flags),
   };
 }
 

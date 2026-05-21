@@ -98,7 +98,7 @@ describe("buildWorldInstruments", () => {
     ]);
   });
 
-  it("decodes the material allow-list flags", () => {
+  it("decodes the material allow-list flags into permittedMaterials", () => {
     const r = buildWorldInstruments([
       entry({
         id: "INSTRUMENT/ENT11 INW1",
@@ -109,7 +109,7 @@ describe("buildWorldInstruments", () => {
         },
       }),
     ]);
-    expect(r.byCiv["ENT11"][0].materials).toEqual(["wood", "bone"]);
+    expect(r.byCiv["ENT11"][0].permittedMaterials).toEqual(["wood", "bone"]);
   });
 
   it("captures piece counts and the building flag", () => {
