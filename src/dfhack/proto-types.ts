@@ -85,6 +85,10 @@ export interface UnitBase {
   labors?: number[] | Array<{ id: number; name?: string }>;
   race?: number | { matType: number; matIndex: number };
   raceName?: string;
+  /** Tile position. BasicUnitInfo fields 13-15. */
+  posX?: number;
+  posY?: number;
+  posZ?: number;
 }
 
 export interface ListUnitsOut {

@@ -9,58 +9,36 @@ function coreDead(over: Record<string, unknown> = {}): any {
     raceName: "dwarf",
     deathId: 7,
     deathFlagsNames: ["killed"],
-    ...over,
-  };
-}
-
-function rfr(
-  id: number,
-  over: Record<string, unknown> = {},
-): { id: number } & Record<string, unknown> {
-  return {
-    id,
     posX: 50,
     posY: 50,
     posZ: 165,
-    bloodCount: 0,
-    bloodMax: 200,
-    wounds: [],
     ...over,
   };
 }
 
 describe("buildMortalityReport", () => {
   it("returns an empty report when no one has died", () => {
-    const r = buildMortalityReport([], new Map());
+    const r = buildMortalityReport([]);
     expect(r.total).toBe(0);
     expect(r.dead).toEqual([]);
     expect(r.byRace).toEqual({});
     expect(r.byProfession).toEqual({});
   });
 
-  it("joins core + rfr per unit and surfaces position, blood, wounds", () => {
-    const rfrMap = new Map<number, any>([
-      [
-        100,
-        rfr(100, {
-          wounds: [
-            {
-              parts: [{ bodyPartId: 5, globalLayerIdx: 1, layerIdx: 0 }],
-              severedPart: true,
-            },
-          ],
-        }),
-      ],
+  it("reads position straight from Core (no RFR join)", () => {
+    const r = buildMortalityReport([
+      coreDead({ posX: 110, posY: 11, posZ: 166 }),
     ]);
-    const r = buildMortalityReport([coreDead()], rfrMap);
-    expect(r.total).toBe(1);
+    expect(r.dead[0].position).toEqual({ x: 110, y: 11, z: 166 });
+  });
+
+  it("surfaces name, race, profession, deathId, deathFlags verbatim", () => {
+    const r = buildMortalityReport([coreDead()]);
     const d = r.dead[0];
     expect(d.name).toEqual({ firstName: "Urist", englishName: "Cleavereyes" });
-    expect(d.position).toEqual({ x: 50, y: 50, z: 165 });
-    expect(d.bloodCount).toBe(0);
-    expect(d.wounds).toHaveLength(1);
-    expect(d.wounds[0].severedPart).toBe(true);
-    expect(d.severedPartCount).toBe(1);
+    expect(d.raceName).toBe("dwarf");
+    expect(d.profession).toBe("Hammerdwarf");
+    expect(d.deathId).toBe(7);
     expect(d.deathFlagsNames).toEqual(["killed"]);
   });
 
@@ -70,8 +48,7 @@ describe("buildMortalityReport", () => {
       coreDead({ unitId: 2, deathId: 7, name: { englishName: "Last" } }),
       coreDead({ unitId: 3, deathId: 5, name: { englishName: "Middle" } }),
     ];
-    const r = buildMortalityReport(dead, new Map());
-    expect(r.dead.map((d) => d.deathId)).toEqual([7, 5, 3]);
+    const r = buildMortalityReport(dead);
     expect(r.dead.map((d) => d.name?.englishName)).toEqual([
       "Last",
       "Middle",
@@ -80,12 +57,14 @@ describe("buildMortalityReport", () => {
   });
 
   it("bubbles units with no deathId to the bottom", () => {
+    // Butchered livestock often have no deathId — they're "removed", not
+    // killed in an event. They should still appear, just at the end.
     const dead = [
       coreDead({ unitId: 1, deathId: 5 }),
       coreDead({ unitId: 2, deathId: undefined }),
       coreDead({ unitId: 3, deathId: 9 }),
     ];
-    const r = buildMortalityReport(dead, new Map());
+    const r = buildMortalityReport(dead);
     expect(r.dead.map((d) => d.unitId)).toEqual([3, 1, 2]);
   });
 
@@ -96,7 +75,7 @@ describe("buildMortalityReport", () => {
       coreDead({ unitId: 3, raceName: "goblin", professionName: "Lasher" }),
       coreDead({ unitId: 4, raceName: "dwarf", professionName: "Carpenter" }),
     ];
-    const r = buildMortalityReport(dead, new Map());
+    const r = buildMortalityReport(dead);
     expect(r.byRace).toEqual({ dwarf: 3, goblin: 1 });
     expect(r.byProfession).toEqual({
       Miner: 2,
@@ -105,42 +84,15 @@ describe("buildMortalityReport", () => {
     });
   });
 
-  it("buckets unknown race / profession as '(unknown)'", () => {
+  it("buckets unknown race / profession as '(unknown)' in rollups", () => {
     const dead = [
       coreDead({ unitId: 1, raceName: undefined, professionName: undefined }),
     ];
-    const r = buildMortalityReport(dead, new Map());
+    const r = buildMortalityReport(dead);
     expect(r.byRace).toEqual({ "(unknown)": 1 });
     expect(r.byProfession).toEqual({ "(unknown)": 1 });
     // The DeadUnit entry itself keeps undefined (no synthetic value baked in).
     expect(r.dead[0].raceName).toBeUndefined();
     expect(r.dead[0].profession).toBeUndefined();
-  });
-
-  it("works when rfr side is missing for a unit (position/wounds blank)", () => {
-    const r = buildMortalityReport([coreDead()], new Map());
-    const d = r.dead[0];
-    expect(d.position).toEqual({ x: undefined, y: undefined, z: undefined });
-    expect(d.bloodCount).toBeUndefined();
-    expect(d.wounds).toEqual([]);
-    expect(d.severedPartCount).toBe(0);
-  });
-
-  it("counts multiple severed parts across wounds", () => {
-    const rfrMap = new Map<number, any>([
-      [
-        100,
-        rfr(100, {
-          wounds: [
-            { parts: [], severedPart: true },
-            { parts: [], severedPart: false },
-            { parts: [], severedPart: true },
-          ],
-        }),
-      ],
-    ]);
-    const r = buildMortalityReport([coreDead()], rfrMap);
-    expect(r.dead[0].severedPartCount).toBe(2);
-    expect(r.dead[0].wounds).toHaveLength(3);
   });
 });

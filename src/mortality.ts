@@ -1,84 +1,44 @@
 // fortress_mortality — who have we lost?
 //
-// Pure aggregator that takes already-joined Core dead-units + RFR creature
-// data and returns a structured mortality audit. Composes the same join
-// pattern as describe_unit / assess_militia: Core ListUnits supplies the
-// structured name + decoded deathFlags + deathId; RFR GetUnitList supplies
-// position + wounds + blood.
+// Pure aggregator over Core's ListUnits(dead:true) output. RFR is NOT
+// consulted: RFR's GetUnitList only returns *active* units, so wounds
+// and blood data never populates for corpses. We dropped that side
+// entirely and rely on Core fields (position included).
 //
 // RFR boundary disclosed in the tool description: no "killed by"
 // attribution, no manner-of-death narrative — those live in the
 // RunLua-blocked event log.
 
 import type { ResolvedName, UnitBase } from "./dfhack/proto-types.js";
-import type { WoundSummary } from "./describe-unit.js";
-
-interface RfrInput {
-  id?: number;
-  posX?: number;
-  posY?: number;
-  posZ?: number;
-  bloodCount?: number;
-  bloodMax?: number;
-  wounds?: Array<{
-    parts?: Array<{
-      bodyPartId?: number;
-      globalLayerIdx?: number;
-      layerIdx?: number;
-    }>;
-    severedPart?: boolean;
-  }>;
-}
 
 export interface DeadUnit {
   unitId: number;
   name?: ResolvedName;
   raceName?: string;
   profession?: string;
-  /** Higher = more recent (DF's monotonic death-event id). May be -1 if unknown. */
+  /** Higher = more recent (DF's monotonic death-event id). Missing for some
+   * deaths (e.g. butchered livestock). Units without a deathId sort to the
+   * bottom of the report. */
   deathId?: number;
   position: { x?: number; y?: number; z?: number };
   /** Already-decoded death-info flag names (e.g. "killed", "starvation"). */
   deathFlagsNames: string[];
-  bloodCount?: number;
-  bloodMax?: number;
-  wounds: WoundSummary[];
-  severedPartCount: number;
 }
 
 export interface MortalityReport {
   total: number;
   byRace: Record<string, number>;
   byProfession: Record<string, number>;
-  /** Ordered by deathId descending (most recent first) if available. */
+  /** Ordered by deathId descending (most recent first); units without a
+   * deathId bubble to the bottom. */
   dead: DeadUnit[];
 }
 
-function severedCount(wounds: DeadUnit["wounds"]): number {
-  return wounds.filter((w) => w.severedPart === true).length;
-}
-
-function asWounds(rfr: RfrInput | undefined): WoundSummary[] {
-  if (!rfr?.wounds) return [];
-  return rfr.wounds.map((w) => ({
-    parts: (w.parts ?? []).map((p) => ({
-      bodyPartId: p.bodyPartId,
-      globalLayerIdx: p.globalLayerIdx,
-      layerIdx: p.layerIdx,
-    })),
-    ...(w.severedPart !== undefined ? { severedPart: w.severedPart } : {}),
-  }));
-}
-
 /**
- * Build the mortality report from a Core dead-unit list (ListUnits dead:true)
- * and a map of RFR creature data keyed by unit id. Pure — no I/O. Ordered
- * by deathId descending so the most recent loss surfaces first.
+ * Build the mortality report from a Core dead-unit list (ListUnits dead:true).
+ * Pure — no I/O.
  */
-export function buildMortalityReport(
-  deadCore: UnitBase[],
-  rfrById: Map<number, RfrInput>,
-): MortalityReport {
+export function buildMortalityReport(deadCore: UnitBase[]): MortalityReport {
   const dead: DeadUnit[] = [];
   const byRace: Record<string, number> = {};
   const byProfession: Record<string, number> = {};
@@ -86,8 +46,6 @@ export function buildMortalityReport(
   for (const u of deadCore) {
     const unitId = (u as { unitId?: number }).unitId;
     if (typeof unitId !== "number") continue;
-    const rfr = rfrById.get(unitId);
-    const wounds = asWounds(rfr);
     const raceName = u.raceName ?? "(unknown)";
     const profession = u.professionName ?? "(unknown)";
     byRace[raceName] = (byRace[raceName] ?? 0) + 1;
@@ -100,20 +58,16 @@ export function buildMortalityReport(
       profession: u.professionName,
       deathId: u.deathId,
       position: {
-        x: rfr?.posX,
-        y: rfr?.posY,
-        z: rfr?.posZ,
+        x: u.posX,
+        y: u.posY,
+        z: u.posZ,
       },
       deathFlagsNames: u.deathFlagsNames ?? [],
-      bloodCount: rfr?.bloodCount,
-      bloodMax: rfr?.bloodMax,
-      wounds,
-      severedPartCount: severedCount(wounds),
     });
   }
 
   // Most recent first. Units without a deathId (defaulted -1 or absent)
-  // bubble to the bottom so they don't displace useful information.
+  // bubble to the bottom.
   dead.sort((a, b) => {
     const ad = typeof a.deathId === "number" ? a.deathId : -Infinity;
     const bd = typeof b.deathId === "number" ? b.deathId : -Infinity;
