@@ -74,6 +74,13 @@ export interface UnitBase {
   deathFlagsNames?: string[];
   /** Unique death-event id; higher = more recent. -1 / undefined when alive. */
   deathId?: number;
+  /**
+   * Historical figure id (BasicUnitInfo.histfig_id). DF uses this ID space
+   * for persistent identity across deaths/retirements. Crucially,
+   * BasicSquadInfo.members[] contains *histfigIds*, not unitIds — so any
+   * squad-membership join MUST be keyed by histfigId.
+   */
+  histfigId?: number;
   skills?: Array<{ id: number; name?: string; nameNoun?: string }>;
   labors?: number[] | Array<{ id: number; name?: string }>;
   race?: number | { matType: number; matIndex: number };

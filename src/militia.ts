@@ -22,11 +22,15 @@ type InventoryEntry = {
 
 /**
  * Already-joined input shape. Each soldier carries enough to evaluate
- * readiness without further lookups.
+ * readiness without further lookups. `histfigId` is required for the
+ * squad-membership join (BasicSquadInfo.members[] contains histfigIds,
+ * not unitIds — DF's persistent-character ID space).
  */
 export interface SoldierInput {
   unitId: number;
+  histfigId?: number;
   name?: ResolvedName;          // structured per project convention
+  raceName?: string;
   professionName?: string;
   isSoldier?: boolean;
   skills?: SkillEntry[];
@@ -43,7 +47,13 @@ export interface SquadInput {
     englishName?: string;
     nickname?: string;
   };
-  memberIds: number[];
+  /**
+   * Raw values from BasicSquadInfo.members[]. These are historical figure
+   * ids, not unit ids. -1 means "empty squad slot". Positive values that
+   * don't match any active unit are treated as unresolved (e.g. dead /
+   * off-map / stale).
+   */
+  memberHistfigIds: number[];
 }
 
 export interface CombatSkill {
@@ -61,7 +71,9 @@ export interface EquipmentSlots {
 
 export interface SoldierReadiness {
   unitId: number;
+  histfigId?: number;
   name?: ResolvedName;
+  raceName?: string;
   profession?: string;
   combatSkills: CombatSkill[];
   /** Best weapon-skill level the soldier has, if any. */
@@ -85,10 +97,23 @@ export interface SquadReadiness {
   squadId: number;
   squadName: string;             // alias preferred; falls back to NameInfo / "(unnamed)"
   members: SoldierReadiness[];
+  /**
+   * histfigIds in the squad's roster that didn't match any active unit
+   * (dead dwarves, off-map, stale data DF hasn't cleaned up).
+   */
+  unresolvedHistfigIds: number[];
   rollups: {
-    total: number;
+    /** Squad capacity (filled + empty + unresolved). */
+    totalSlots: number;
+    /** Slots filled with resolvable active units. */
+    filled: number;
+    /** -1 placeholders (DF's "empty squad slot"). */
+    emptySlots: number;
+    /** filled members who have a weapon and full armor coverage. */
     fullyEquipped: number;
+    /** filled members with a combat or weapon skill ≥ threshold. */
     trained: number;
+    /** fullyEquipped AND trained. */
     ready: number;
   };
 }
@@ -240,7 +265,9 @@ function readiness(
   const trained = combatSkills.length > 0 && combatSkills[0].level >= threshold;
   return {
     unitId: soldier.unitId,
+    ...(soldier.histfigId !== undefined ? { histfigId: soldier.histfigId } : {}),
     name: soldier.name ? { ...soldier.name } : undefined,
+    raceName: soldier.raceName,
     profession: soldier.professionName,
     combatSkills,
     ...(topWeapon ? { topWeapon } : {}),
@@ -258,11 +285,11 @@ export interface MilitiaOptions {
 
 /**
  * Build the readiness report. Inputs are pre-joined:
- *   - squads: from ListSquads
- *   - soldiers: each entry already carries skills + inventory (RFR + Core join)
+ *   - squads: from ListSquads (memberHistfigIds are DF histfigIds)
+ *   - soldiers: each entry carries unitId + histfigId + skills + inventory
  *
- * Pure: deterministic ordering (squads by squadId, members by missing-slot
- * count then unitId so the worst-equipped surface first).
+ * Pure: deterministic ordering (squads by squadId, members worst-equipped
+ * first then by unitId).
  */
 export function buildMilitiaReport(
   squads: SquadInput[],
@@ -270,23 +297,36 @@ export function buildMilitiaReport(
   options: MilitiaOptions = {},
 ): MilitiaReport {
   const threshold = options.trainedThreshold ?? 5;
-  const byId = new Map<number, SoldierInput>();
-  for (const s of soldiers) byId.set(s.unitId, s);
+  // Squad members are histfigIds, so key the lookup by histfigId.
+  const byHistfig = new Map<number, SoldierInput>();
+  for (const s of soldiers) {
+    if (typeof s.histfigId === "number" && s.histfigId > 0) {
+      byHistfig.set(s.histfigId, s);
+    }
+  }
 
-  const claimed = new Set<number>();
+  const claimedHistfigs = new Set<number>();
   const squadReports: SquadReadiness[] = [];
   for (const squad of [...squads].sort((a, b) => a.squadId - b.squadId)) {
     const members: SoldierReadiness[] = [];
-    for (const memberId of squad.memberIds) {
-      claimed.add(memberId);
-      const input = byId.get(memberId);
-      if (!input) {
-        // Squad lists an id we don't have unit data for — keep a stub so
-        // the squad roster is still accurate. Equipment classification
-        // shows everything as missing.
-        members.push(readiness({ unitId: memberId }, threshold));
+    const unresolvedHistfigIds: number[] = [];
+    let emptySlots = 0;
+    for (const histfigId of squad.memberHistfigIds) {
+      // DF reports empty squad slots as -1 (and occasionally 0). Skip
+      // these — they're noise, not real members.
+      if (histfigId <= 0) {
+        emptySlots++;
         continue;
       }
+      const input = byHistfig.get(histfigId);
+      if (!input) {
+        // Squad lists a histfigId we have no active unit for — typically
+        // a dead/off-map/retired dwarf DF hasn't cleaned out of the
+        // roster. Surface separately rather than as a stub member.
+        unresolvedHistfigIds.push(histfigId);
+        continue;
+      }
+      claimedHistfigs.add(histfigId);
       members.push(readiness(input, threshold));
     }
     members.sort((a, b) => {
@@ -299,8 +339,11 @@ export function buildMilitiaReport(
       squadId: squad.squadId,
       squadName: squadDisplayName(squad),
       members,
+      unresolvedHistfigIds,
       rollups: {
-        total: members.length,
+        totalSlots: squad.memberHistfigIds.length,
+        filled: members.length,
+        emptySlots,
         fullyEquipped: members.filter((m) => m.fullyEquipped).length,
         trained: members.filter((m) => m.trained).length,
         ready: members.filter((m) => m.ready).length,
@@ -310,7 +353,7 @@ export function buildMilitiaReport(
 
   const unsquaddedSoldiers: SoldierReadiness[] = [];
   for (const s of soldiers) {
-    if (claimed.has(s.unitId)) continue;
+    if (typeof s.histfigId === "number" && claimedHistfigs.has(s.histfigId)) continue;
     if (s.isSoldier) unsquaddedSoldiers.push(readiness(s, threshold));
   }
   unsquaddedSoldiers.sort((a, b) => a.unitId - b.unitId);
@@ -321,4 +364,3 @@ export function buildMilitiaReport(
     trainedThreshold: threshold,
   };
 }
-

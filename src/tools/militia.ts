@@ -21,6 +21,7 @@ interface BasicSquadInfo {
   squadId: number;
   alias?: string;
   name?: ResolvedName;
+  /** DF stores squad members as historical figure ids, not unit ids. */
   members?: number[];
 }
 
@@ -37,8 +38,11 @@ export function registerMilitiaTool(server: McpServer) {
       "isn't in a squad (draftees, civilian militia). Per-soldier output " +
       "names the worst-equipped first so the report surfaces the dwarves " +
       "marching to their deaths in a dress. Composes list_squads + " +
-      "list_units (skills mask) + get_unit_list (inventory) and joins " +
-      "by unit id." +
+      "list_units (skills mask) + get_unit_list (inventory). Joined via " +
+      "histfigId, not unitId — DF squads track persistent historical-figure " +
+      "identity. Empty squad slots are filtered; histfigIds that no longer " +
+      "match any active unit (dead/off-map/stale roster) surface as " +
+      "unresolvedHistfigIds on the squad rather than as stub members." +
       " Does NOT see current job (sparring vs patrolling vs idle), squad " +
       "training schedule, or kill counts — those are RunLua-blocked." +
       STRUCTURED_NAME_NOTE,
@@ -65,54 +69,77 @@ export function registerMilitiaTool(server: McpServer) {
         const creatures = rfrResult.creatureList ?? [];
         await enrichCreatureList(creatures);
 
-        // Index core units by id (preferred source for structured name +
-        // skills + profession) and RFR creatures by id (source for inventory
-        // and the isSoldier flag).
-        const coreById = new Map<number, UnitBase>();
+        // Two indexes from Core: by histfigId (the squad-join key) and by
+        // unitId (so we can match the RFR creature for inventory).
+        const coreByHistfig = new Map<number, UnitBase>();
+        const coreByUnitId = new Map<number, UnitBase>();
         for (const u of coreUnits) {
           const uid = (u as { unitId?: number }).unitId;
-          if (typeof uid === "number") coreById.set(uid, u);
+          if (typeof uid === "number") coreByUnitId.set(uid, u);
+          if (typeof u.histfigId === "number" && u.histfigId > 0) {
+            coreByHistfig.set(u.histfigId, u);
+          }
         }
         const rfrById = new Map<number, CreatureRaw>();
         for (const c of creatures) {
           if (typeof c.id === "number") rfrById.set(c.id, c);
         }
 
-        // Soldiers we care about: any unit that's in a squad, plus any RFR
-        // creature flagged isSoldier (covers civilian militia / draftees
-        // not yet bound to a squad).
-        const inSquads = new Set<number>();
-        const squads: SquadInput[] = (squadsResult.value ?? []).map((s) => {
-          const members = s.members ?? [];
-          for (const m of members) inSquads.add(m);
-          return {
-            squadId: s.squadId,
-            alias: s.alias,
-            name: s.name,
-            memberIds: members,
-          };
-        });
+        const squads: SquadInput[] = (squadsResult.value ?? []).map((s) => ({
+          squadId: s.squadId,
+          alias: s.alias,
+          name: s.name,
+          memberHistfigIds: s.members ?? [],
+        }));
 
-        const wantedIds = new Set<number>(inSquads);
-        for (const c of creatures) {
-          if (typeof c.id === "number" && (c as { isSoldier?: boolean }).isSoldier) {
-            wantedIds.add(c.id);
+        // Build SoldierInput entries for every dwarf the squads reference
+        // *plus* every RFR-flagged isSoldier. The aggregator decides which
+        // belong to which squad via histfigId.
+        const interestingHistfigs = new Set<number>();
+        for (const sq of squads) {
+          for (const h of sq.memberHistfigIds) {
+            if (h > 0) interestingHistfigs.add(h);
           }
         }
 
         const soldiers: SoldierInput[] = [];
-        for (const id of wantedIds) {
-          const core = coreById.get(id);
-          const rfr = rfrById.get(id);
-          // Prefer the structured name from Core; fall back to nothing (the
-          // aggregator handles undefined names cleanly).
+        const seenUnitIds = new Set<number>();
+
+        for (const histfigId of interestingHistfigs) {
+          const core = coreByHistfig.get(histfigId);
+          if (!core) continue; // unresolved — handled inside the aggregator
+          const unitId = (core as { unitId?: number }).unitId;
+          if (typeof unitId !== "number") continue;
+          seenUnitIds.add(unitId);
+          const rfr = rfrById.get(unitId);
           soldiers.push({
-            unitId: id,
-            name: core?.name,
-            professionName: core?.professionName ?? rfr?.professionName,
+            unitId,
+            histfigId,
+            name: core.name,
+            raceName: core.raceName ?? rfr?.raceName,
+            professionName: core.professionName ?? rfr?.professionName,
             isSoldier: (rfr as { isSoldier?: boolean } | undefined)?.isSoldier,
-            skills: (core as { skills?: SoldierInput["skills"] } | undefined)?.skills,
+            skills: (core as { skills?: SoldierInput["skills"] }).skills,
             inventory: (rfr as { inventory?: SoldierInput["inventory"] } | undefined)?.inventory,
+          });
+        }
+
+        // Also include RFR-flagged isSoldier units that aren't already in a
+        // squad's roster — civilian draftees / militia not yet assigned.
+        for (const c of creatures) {
+          if (typeof c.id !== "number") continue;
+          if (seenUnitIds.has(c.id)) continue;
+          if (!(c as { isSoldier?: boolean }).isSoldier) continue;
+          const core = coreByUnitId.get(c.id);
+          soldiers.push({
+            unitId: c.id,
+            histfigId: core?.histfigId,
+            name: core?.name,
+            raceName: core?.raceName ?? c.raceName,
+            professionName: core?.professionName ?? c.professionName,
+            isSoldier: true,
+            skills: (core as { skills?: SoldierInput["skills"] } | undefined)?.skills,
+            inventory: (c as { inventory?: SoldierInput["inventory"] }).inventory,
           });
         }
 
