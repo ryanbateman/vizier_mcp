@@ -1,4 +1,4 @@
-import type { UnitBase } from "./dfhack/proto-types.js";
+import type { ResolvedName, UnitBase } from "./dfhack/proto-types.js";
 
 export interface ProjectionOptions {
   /** Minimal roster: id, name, race, profession, top skill. Overrides verbose. */
@@ -12,7 +12,7 @@ export interface ProjectionOptions {
  */
 export interface UnitSummary {
   id?: number;
-  name?: string;
+  name?: ResolvedName;
   raceName?: string;
   professionName?: string;
   topSkill: { name: string; level: number } | null;
@@ -28,12 +28,6 @@ type SkillEntry = {
   name?: string;
   nameNoun?: string;
 };
-
-function bestName(name: UnitBase["name"]): string | undefined {
-  if (!name) return undefined;
-  if (typeof name === "string") return name;
-  return name.englishName || name.firstName || name.nickname || name.lastName;
-}
 
 function topSkill(skills: SkillEntry[] | undefined): UnitSummary["topSkill"] {
   if (!skills || skills.length === 0) return null;
@@ -79,7 +73,9 @@ export function projectUnits(
         ?? (u as { id?: number }).id;
       return {
         id: unitId,
-        name: bestName(u.name),
+        // Pass the structured name through; DF UI display is firstName +
+        // lastName, but we leave composition to the agent.
+        name: u.name ? { ...u.name } : undefined,
         raceName: u.raceName,
         professionName: u.professionName,
         topSkill: topSkill(u.skills as SkillEntry[] | undefined),

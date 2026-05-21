@@ -1,4 +1,4 @@
-import type { GetWorldInfoOut, UnitBase } from "./dfhack/proto-types.js";
+import type { GetWorldInfoOut, ResolvedName, UnitBase } from "./dfhack/proto-types.js";
 import type { LookupTables } from "./lookup-cache.js";
 
 /** Mirrors RemoteFortressReader.GetWorldInfoOut.Mode (proto2 enum). */
@@ -22,7 +22,7 @@ export interface MapInfoLike {
 }
 
 export interface OverviewSkillEntry {
-  unit: string;
+  unit: ResolvedName;
   skill: string;
   level: number;
   profession?: string;
@@ -60,11 +60,8 @@ function nameOfWorld(worldName: unknown): string | undefined {
   return w.englishName || w.lastName;
 }
 
-function bestUnitName(u: UnitBase): string {
-  const n = u.name;
-  if (!n) return "(unnamed)";
-  if (typeof n === "string") return n;
-  return n.englishName || n.firstName || n.nickname || n.lastName || "(unnamed)";
+function unitNameObject(u: UnitBase): ResolvedName {
+  return u.name ? { ...u.name } : {};
 }
 
 /**
@@ -106,7 +103,7 @@ export function buildFortressOverview(
       | Array<{ name?: string; level?: number }>
       | undefined;
     if (!skills) continue;
-    const unitLabel = bestUnitName(u);
+    const unitLabel = unitNameObject(u);
     for (const s of skills) {
       if (s.name && (s.level ?? 0) >= notableMinLevel) {
         notable.push({

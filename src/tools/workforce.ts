@@ -5,6 +5,7 @@ import {
   enrichUnitList,
   errorResult,
   jsonResult,
+  STRUCTURED_NAME_NOTE,
 } from "./helpers.js";
 import { buildWorkforceReport } from "../workforce.js";
 import type {
@@ -21,7 +22,8 @@ export function registerWorkforceTool(server: McpServer) {
       "profession), underused legends (legendary skill outside the canonical " +
       "role), idle generalists (no skill at or above the threshold), and " +
       "the single best practitioner per skill. Defaults to the world's " +
-      "player race. Does NOT see current job, mood/stress, or relationships.",
+      "player race. Does NOT see current job, mood/stress, or relationships." +
+      STRUCTURED_NAME_NOTE,
     {
       race: z.number().optional().describe(
         "Race ID to survey (default: world's player race from GetWorldInfo)",

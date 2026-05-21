@@ -5,6 +5,7 @@ import {
   enrichUnitList,
   jsonResult,
   errorResult,
+  STRUCTURED_NAME_NOTE,
 } from "./helpers.js";
 import { ensureLookups } from "../lookup-cache.js";
 import { buildFortressOverview, type MapInfoLike } from "../overview.js";
@@ -23,7 +24,8 @@ export function registerOverviewTools(server: McpServer) {
       "gender split, top-N notable skills L>=5). Bounded, small payload — use " +
       "this before drilling into list_units / get_unit. Honors the same " +
       "RunLua-blocked data boundary as the rest of the server (no jobs, mood, " +
-      "stress, legends, relationships).",
+      "stress, legends, relationships)." +
+      STRUCTURED_NAME_NOTE,
     {
       race: z.number().optional().describe(
         "Race ID to count (default: world's player race from GetWorldInfo)",

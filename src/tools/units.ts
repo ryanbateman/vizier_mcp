@@ -7,6 +7,8 @@ import {
   errorResult,
   enrichCreatureList,
   enrichUnitList,
+  overlayStructuredNames,
+  STRUCTURED_NAME_NOTE,
 } from "./helpers.js";
 import { paginateBySize } from "../pagination.js";
 import { projectUnits } from "../projection.js";
@@ -60,7 +62,8 @@ export function registerUnitTools(server: McpServer) {
       " (id, name, race, profession, top skill) or verbose:true for the full original" +
       " shape. Pages are also bounded by serialized size and may set truncated:true" +
       " + nextOffset before hitting the requested limit." +
-      NAMES_RESOLVED_NOTE,
+      NAMES_RESOLVED_NOTE +
+      STRUCTURED_NAME_NOTE,
     {
       scan_all: z.boolean().optional().describe("Scan all active and killed units (default: false)"),
       race: z.number().optional().describe("Filter by race ID (e.g., 572 for dwarves)"),
@@ -144,7 +147,8 @@ export function registerUnitTools(server: McpServer) {
     "Get a single fully-enriched unit by ID or name, including inventory" +
       " (worn/carried items) with resolved material and item names." +
       " Use this for \"what is <dwarf> wearing / carrying\" — one call, no lookups." +
-      NAMES_RESOLVED_NOTE,
+      NAMES_RESOLVED_NOTE +
+      STRUCTURED_NAME_NOTE,
     {
       id: z.number().int().optional().describe("Unit ID (exact match)"),
       name: z.string().optional().describe("Unit name (substring match, case-insensitive). Used if id is not given."),
@@ -164,6 +168,7 @@ export function registerUnitTools(server: McpServer) {
           matches = creatures.filter((c) => unitSearchString(c.name).includes(lower));
         }
         await enrichCreatureList(matches);
+        await overlayStructuredNames(matches);
         return jsonResult({ matched: matches.length, units: matches });
       } catch (err: unknown) {
         return errorResult(err);
@@ -204,12 +209,15 @@ export function registerUnitTools(server: McpServer) {
   server.tool(
     "get_unit_list",
     "List all units in the fortress: dwarves, animals, invaders, etc. Returns names, positions, races, and skills. Note: response can be large for big fortresses." +
-      NAMES_RESOLVED_NOTE,
+      NAMES_RESOLVED_NOTE +
+      STRUCTURED_NAME_NOTE,
     {},
     async () => {
       try {
         const result = await callToolTyped<UnitList>("GetUnitList");
-        await enrichCreatureList(result.creatureList ?? []);
+        const creatures = result.creatureList ?? [];
+        await enrichCreatureList(creatures);
+        await overlayStructuredNames(creatures);
         return jsonResult(result);
       } catch (err: unknown) {
         return errorResult(err);
@@ -220,12 +228,15 @@ export function registerUnitTools(server: McpServer) {
   server.tool(
     "get_unit_list_inside",
     "List units within a specific map region (bounding box). Returns units whose positions fall within the specified coordinates." +
-      NAMES_RESOLVED_NOTE,
+      NAMES_RESOLVED_NOTE +
+      STRUCTURED_NAME_NOTE,
     blockRequestSchema,
     async ({ minX, minY, minZ, maxX, maxY, maxZ }) => {
       try {
         const result = await callToolTyped<UnitList>("GetUnitListInside", { minX, minY, minZ, maxX, maxY, maxZ });
-        await enrichCreatureList(result.creatureList ?? []);
+        const creatures = result.creatureList ?? [];
+        await enrichCreatureList(creatures);
+        await overlayStructuredNames(creatures);
         return jsonResult(result);
       } catch (err: unknown) {
         return errorResult(err);

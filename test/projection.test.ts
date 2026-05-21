@@ -71,11 +71,11 @@ describe("projectUnits — default (trim)", () => {
 });
 
 describe("projectUnits — summary", () => {
-  it("returns roster shape with top skill", () => {
+  it("returns roster shape with top skill and structured name", () => {
     const [s] = projectUnits([makeUnit()], { summary: true }) as any[];
     expect(s).toEqual({
       id: 1,
-      name: "Waywardpillar",
+      name: { firstName: "shorast", englishName: "Waywardpillar" },
       raceName: "dwarf",
       professionName: "Planter",
       topSkill: { name: "Poetry", level: 7 },
@@ -89,12 +89,22 @@ describe("projectUnits — summary", () => {
     expect(s.topSkill).toBeNull();
   });
 
-  it("falls back to firstName when englishName missing", () => {
+  it("passes the full structured name through (no collapse to a single string)", () => {
     const [s] = projectUnits(
-      [makeUnit({ name: { firstName: "urist" } })],
+      [makeUnit({
+        name: {
+          firstName: "Bëmbul",
+          lastName: "Fikodad",
+          englishName: "Glazesuns",
+        },
+      })],
       { summary: true },
     ) as any[];
-    expect(s.name).toBe("urist");
+    expect(s.name).toEqual({
+      firstName: "Bëmbul",
+      lastName: "Fikodad",
+      englishName: "Glazesuns",
+    });
   });
 
   it("summary wins over verbose when both passed", () => {

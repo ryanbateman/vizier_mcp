@@ -90,7 +90,7 @@ describe("buildFortressOverview", () => {
     const o = buildFortressOverview(world, map, units, lookups);
     expect(o.population.notable.length).toBe(2);
     expect(o.population.notable[0]).toEqual({
-      unit: "Channelboar",
+      unit: { englishName: "Channelboar" },
       skill: "Mining",
       level: 16,
       profession: "Miner",
@@ -109,7 +109,7 @@ describe("buildFortressOverview", () => {
       notableLimit: 1,
     });
     expect(o.population.notable).toEqual([
-      { unit: "A", skill: "S1", level: 6, profession: "X" },
+      { unit: { englishName: "A" }, skill: "S1", level: 6, profession: "X" },
     ]);
   });
 

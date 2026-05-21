@@ -1,4 +1,4 @@
-import type { UnitBase } from "./dfhack/proto-types.js";
+import type { ResolvedName, UnitBase } from "./dfhack/proto-types.js";
 import {
   PROFESSION_ALIGNED_SKILL,
   SKILL_EXPECTED_PROFESSION,
@@ -13,14 +13,14 @@ type SkillEntry = {
 };
 
 export interface WorkforceMismatch {
-  name: string;
+  name: ResolvedName;
   profession: string;
   topSkill: { name: string; level: number };
   alignedSkill?: { name: string; level: number };
 }
 
 export interface WorkforceLegend {
-  name: string;
+  name: ResolvedName;
   skill: string;
   level: number;
   expectedProfession: string;
@@ -28,7 +28,7 @@ export interface WorkforceLegend {
 }
 
 export interface WorkforceIdle {
-  name: string;
+  name: ResolvedName;
   profession: string;
   topSkill?: { name: string; level: number };
 }
@@ -40,7 +40,7 @@ export interface WorkforceReport {
   mismatches: WorkforceMismatch[];
   idleGeneralists: WorkforceIdle[];
   /** Single best practitioner per skill name (across the surveyed units). */
-  skillTop: Record<string, { name: string; level: number }>;
+  skillTop: Record<string, { name: ResolvedName; level: number }>;
   /** Roles that intentionally have no canonical craft skill alignment. */
   uncategorisedRoles: string[];
 }
@@ -54,11 +54,10 @@ export interface WorkforceOptions {
   mismatchDelta?: number;
 }
 
-function bestName(u: UnitBase): string {
-  const n = u.name;
-  if (!n) return "(unnamed)";
-  if (typeof n === "string") return n;
-  return n.englishName || n.firstName || n.nickname || n.lastName || "(unnamed)";
+function nameObject(u: UnitBase): ResolvedName {
+  // Pass the structured DF name through verbatim. DF UI canonical display is
+  // firstName + " " + lastName — the agent renders; we never collapse here.
+  return u.name ? { ...u.name } : {};
 }
 
 function topSkillOf(skills: SkillEntry[] | undefined): SkillEntry | undefined {
@@ -96,7 +95,7 @@ export function buildWorkforceReport(
   const mismatches: WorkforceMismatch[] = [];
   const underusedLegends: WorkforceLegend[] = [];
   const idleGeneralists: WorkforceIdle[] = [];
-  const skillTop: Record<string, { name: string; level: number }> = {};
+  const skillTop: Record<string, { name: ResolvedName; level: number }> = {};
   const uncategorisedRoles = new Set<string>();
 
   for (const u of units) {
@@ -104,7 +103,7 @@ export function buildWorkforceReport(
     byProfession[profession] = (byProfession[profession] ?? 0) + 1;
 
     const skills = u.skills as SkillEntry[] | undefined;
-    const unitLabel = bestName(u);
+    const unitLabel = nameObject(u);
 
     // Per-skill best practitioner across the surveyed set.
     if (skills) {

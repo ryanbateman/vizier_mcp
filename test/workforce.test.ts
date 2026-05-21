@@ -2,12 +2,14 @@ import { describe, it, expect } from "vitest";
 import { buildWorkforceReport } from "../src/workforce.js";
 
 function unit(
-  name: string,
+  englishName: string,
   professionName: string,
   skills: Array<{ name: string; level: number }> = [],
 ): any {
+  // Fixtures only need englishName for distinguishing units in assertions;
+  // the resolver passes the full structured name through verbatim.
   return {
-    name: { englishName: name },
+    name: { englishName },
     professionName,
     skills,
   };
@@ -33,7 +35,7 @@ describe("buildWorkforceReport", () => {
     ]);
     expect(report.underusedLegends).toEqual([
       {
-        name: "Waywardpillar",
+        name: { englishName: "Waywardpillar" },
         skill: "Poetry",
         level: 18,
         expectedProfession: "(no canonical role)",
@@ -52,7 +54,7 @@ describe("buildWorkforceReport", () => {
     ]);
     expect(report.mismatches).toEqual([
       {
-        name: "Waywardpillar",
+        name: { englishName: "Waywardpillar" },
         profession: "Planter",
         topSkill: { name: "Poetry", level: 7 },
         alignedSkill: { name: "Growing", level: 2 },
@@ -78,7 +80,7 @@ describe("buildWorkforceReport", () => {
     ]);
     expect(report.idleGeneralists).toEqual([
       {
-        name: "Searchcrafted",
+        name: { englishName: "Searchcrafted" },
         profession: "Mason",
         topSkill: { name: "Dance", level: 3 },
       },
@@ -92,7 +94,10 @@ describe("buildWorkforceReport", () => {
     expect(report.underusedLegends).toEqual([]);
     expect(report.mismatches).toEqual([]);
     expect(report.idleGeneralists).toEqual([]);
-    expect(report.skillTop["Mining"]).toEqual({ name: "Channelboar", level: 17 });
+    expect(report.skillTop["Mining"]).toEqual({
+      name: { englishName: "Channelboar" },
+      level: 17,
+    });
   });
 
   it("skips roles with no canonical craft skill (Trader/Child/Peasant)", () => {
@@ -114,8 +119,14 @@ describe("buildWorkforceReport", () => {
       unit("B", "Miner", [{ name: "Mining", level: 17 }]),
       unit("C", "Carpenter", [{ name: "Carpentry", level: 12 }]),
     ]);
-    expect(report.skillTop["Mining"]).toEqual({ name: "B", level: 17 });
-    expect(report.skillTop["Carpentry"]).toEqual({ name: "C", level: 12 });
+    expect(report.skillTop["Mining"]).toEqual({
+      name: { englishName: "B" },
+      level: 17,
+    });
+    expect(report.skillTop["Carpentry"]).toEqual({
+      name: { englishName: "C" },
+      level: 12,
+    });
   });
 
   it("honors threshold overrides", () => {

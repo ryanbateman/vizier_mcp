@@ -51,13 +51,15 @@ export interface MaterialList {
   materialList: MaterialDef[];
 }
 
+export interface ResolvedName {
+  firstName?: string;
+  lastName?: string;
+  englishName?: string;
+  nickname?: string;
+}
+
 export interface UnitBase {
-  name?: {
-    firstName?: string;
-    lastName?: string;
-    englishName?: string;
-    nickname?: string;
-  };
+  name?: ResolvedName;
   profession?: number;
   professionName?: string;
   gender?: number;
@@ -86,7 +88,14 @@ export interface ListMaterialsOut {
 
 export interface CreatureRaw {
   id?: number;
-  name?: string;
+  /**
+   * RFR's GetUnitList returns a pre-composed string ("firstName englishName"),
+   * which is NOT what the DF UI displays (the UI shows the *dwarvish* surname
+   * from ListUnits). Tool handlers that surface CreatureRaw should overlay
+   * the structured name from ListUnits before responding — see
+   * overlayStructuredNames in tools/helpers.ts.
+   */
+  name?: string | ResolvedName;
   race?: number | { matType: number; matIndex: number };
   raceName?: string;
   profession?: number;

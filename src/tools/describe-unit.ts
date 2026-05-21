@@ -6,6 +6,7 @@ import {
   enrichUnitList,
   errorResult,
   jsonResult,
+  STRUCTURED_NAME_NOTE,
 } from "./helpers.js";
 import { buildUnitDescription } from "../describe-unit.js";
 import type {
@@ -38,7 +39,8 @@ export function registerDescribeUnitTool(server: McpServer) {
       "blood level, wounds (structural), and full inventory with material+ " +
       "item names resolved. One call instead of get_unit + list_units. " +
       "Does NOT see current job, mood/stress/personality, relationships, " +
-      "or memories (the RunLua-blocked surface — see README appendix).",
+      "or memories (the RunLua-blocked surface — see README appendix)." +
+      STRUCTURED_NAME_NOTE,
     {
       id: z.number().int().optional().describe("Unit ID (exact match)"),
       name: z.string().optional().describe(
@@ -101,13 +103,23 @@ export function registerDescribeUnitTool(server: McpServer) {
           matched: rfrMatches.length,
           unit: description,
           // If more than one RFR match, mention the rest so callers can
-          // disambiguate by id without re-querying.
+          // disambiguate by id without re-querying. Use the structured name
+          // from the core join so disambiguation matches what the DF UI shows.
           ...(rfrMatches.length > 1
             ? {
-                otherMatches: rfrMatches.slice(1).map((m) => ({
-                  id: m.id,
-                  name: typeof m.name === "string" ? m.name : undefined,
-                })),
+                otherMatches: rfrMatches.slice(1).map((m) => {
+                  const c = typeof m.id === "number"
+                    ? coreById.get(m.id)
+                    : undefined;
+                  return {
+                    id: m.id,
+                    name: c?.name
+                      ? { ...c.name }
+                      : typeof m.name === "string"
+                        ? { englishName: m.name }
+                        : undefined,
+                  };
+                }),
               }
             : {}),
         });
