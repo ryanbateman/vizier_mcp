@@ -3,3 +3,6 @@ build/
 generated/
 *.js.map
 *.tgz
+
+# Local-only Claude Code dev MCP config (machine-specific path)
+.mcp.json
