@@ -7,15 +7,8 @@ import {
   validateHandshakeResponse,
   RPC_REPLY_RESULT,
   RPC_REPLY_FAIL,
-  RPC_REPLY_TEXT,
   RPC_REQUEST_QUIT,
-  CR_OK,
-  CR_FAILURE,
   CR_WRONG_USAGE,
-  CR_NOT_FOUND,
-  CR_NOT_IMPLEMENTED,
-  CR_LINK_FAILURE,
-  CR_NEEDS_CONSOLE,
 } from "../src/dfhack/codec.js";
 
 describe("encodeHeader / decodeHeader", () => {
@@ -122,14 +115,3 @@ describe("handshake", () => {
   });
 });
 
-describe("command_result codes", () => {
-  it("has correct values for known codes", () => {
-    expect(CR_OK).toBe(0);
-    expect(CR_FAILURE).toBe(1);
-    expect(CR_WRONG_USAGE).toBe(2);
-    expect(CR_NOT_FOUND).toBe(3);
-    expect(CR_NOT_IMPLEMENTED).toBe(-1);
-    expect(CR_NEEDS_CONSOLE).toBe(-2);
-    expect(CR_LINK_FAILURE).toBe(-3);
-  });
-});

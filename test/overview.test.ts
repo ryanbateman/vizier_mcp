@@ -38,13 +38,15 @@ function unit(name: string, profession: string, gender: "Male" | "Female", skill
 describe("buildFortressOverview", () => {
   it("resolves world name, save, mode label, and race name", () => {
     const o = buildFortressOverview(world, map, [], lookups);
-    expect(o.world.name).toBe("The Universes of Vision");
-    expect(o.world.save).toBe("region1");
-    expect(o.world.mode).toBe("Dwarf Fortress");
-    expect(o.world.civId).toBe(11);
-    expect(o.world.siteId).toBe(34);
-    expect(o.world.raceId).toBe(572);
-    expect(o.world.raceName).toBe("dwarf");
+    expect(o.world).toMatchObject({
+      name: "The Universes of Vision",
+      save: "region1",
+      mode: "Dwarf Fortress",
+      civId: 11,
+      siteId: 34,
+      raceId: 572,
+      raceName: "dwarf",
+    });
   });
 
   it("falls back to 'Mode N' for unknown mode values", () => {
@@ -60,22 +62,24 @@ describe("buildFortressOverview", () => {
     expect(o.map.blockOrigin).toEqual({ x: 51, y: 145, z: -27 });
   });
 
-  it("aggregates profession histogram and gender split", () => {
+  it("aggregates profession histogram and gender split (incl. unknown bucket)", () => {
     const units = [
       unit("A", "Miner", "Male", []),
       unit("B", "Miner", "Female", []),
       unit("C", "Carpenter", "Male", []),
       unit("D", "Carpenter", "Male", []),
       unit("E", "Planter", "Female", []),
+      // No genderName → falls into Unknown bucket.
+      { name: { englishName: "F" }, professionName: "Planter", skills: [] } as any,
     ];
     const o = buildFortressOverview(world, map, units, lookups);
-    expect(o.population.total).toBe(5);
+    expect(o.population.total).toBe(6);
     expect(o.population.byProfession).toEqual({
       Miner: 2,
       Carpenter: 2,
-      Planter: 1,
+      Planter: 2,
     });
-    expect(o.population.byGender).toEqual({ Male: 3, Female: 2, Unknown: 0 });
+    expect(o.population.byGender).toEqual({ Male: 3, Female: 2, Unknown: 1 });
   });
 
   it("collects notable skills above the threshold, sorted by level", () => {
@@ -113,9 +117,4 @@ describe("buildFortressOverview", () => {
     ]);
   });
 
-  it("buckets unknown gender", () => {
-    const units = [unit("A", "X", "Male", []), { name: { englishName: "B" } } as any];
-    const o = buildFortressOverview(world, map, units, lookups);
-    expect(o.population.byGender).toEqual({ Male: 1, Female: 0, Unknown: 1 });
-  });
 });

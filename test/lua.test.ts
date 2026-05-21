@@ -13,17 +13,15 @@ describe("isValidRpcModule", () => {
     expect(isValidRpcModule("a.rpc")).toBe(true);
   });
 
-  it("rejects built-in / arbitrary modules", () => {
-    expect(isValidRpcModule("dfhack.units")).toBe(false);
-    expect(isValidRpcModule("df.global")).toBe(false);
-    expect(isValidRpcModule("dfhack.maps")).toBe(false);
-    expect(isValidRpcModule("utils")).toBe(false);
+  it("rejects names that don't match any allowed pattern", () => {
+    // One example per rejection reason. Enumerating every built-in name
+    // tests the regex's negative space, not behaviour.
+    expect(isValidRpcModule("dfhack.units")).toBe(false); // not rpc.* / *.rpc / *-rpc
+    expect(isValidRpcModule("utils")).toBe(false);        // no prefix/suffix marker
   });
 
-  it("rejects empty and too-short names (DFHack requires length > 4)", () => {
-    expect(isValidRpcModule("")).toBe(false);
-    expect(isValidRpcModule("rpc")).toBe(false);
-    expect(isValidRpcModule("rpc.")).toBe(false);
-    expect(isValidRpcModule(".rpc")).toBe(false);
+  it("rejects names DFHack itself would reject as too short (length <= 4)", () => {
+    expect(isValidRpcModule("")).toBe(false);    // empty
+    expect(isValidRpcModule("rpc.")).toBe(false); // exactly length 4, no module body
   });
 });

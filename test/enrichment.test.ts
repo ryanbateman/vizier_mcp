@@ -78,25 +78,15 @@ describe("resolveUnitNames", () => {
     expect(unit.professionName).toBe("Woodcutter");
   });
 
-  it("resolves gender: female", () => {
+  it.each([
+    [0, "Female"],
+    [1, "Male"],
+    [2, undefined],
+  ])("resolves gender %d → %s", (gender, expected) => {
     const lookups = makeLookups();
-    const unit: any = { gender: 0 };
+    const unit: any = { gender };
     resolveUnitNames(unit, lookups);
-    expect(unit.genderName).toBe("Female");
-  });
-
-  it("resolves gender: male", () => {
-    const lookups = makeLookups();
-    const unit: any = { gender: 1 };
-    resolveUnitNames(unit, lookups);
-    expect(unit.genderName).toBe("Male");
-  });
-
-  it("does not set gender for unknown values", () => {
-    const lookups = makeLookups();
-    const unit: any = { gender: 2 };
-    resolveUnitNames(unit, lookups);
-    expect(unit.genderName).toBeUndefined();
+    expect(unit.genderName).toBe(expected);
   });
 
   it("resolves flags1 names", () => {

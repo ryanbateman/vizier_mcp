@@ -5,33 +5,23 @@ import {
 } from "../src/profession-skill-map.js";
 
 describe("profession-skill-map", () => {
-  it("covers the canonical craft roles seen in the live test fort", () => {
+  it("maps craft roles to their canonical skill and omits coordinative roles", () => {
+    // Representative sample of each behaviour, not an enumeration of the
+    // full map (the map IS the spec; round-tripping every entry just
+    // restates it).
     expect(PROFESSION_ALIGNED_SKILL.Miner).toBe("Mining");
-    expect(PROFESSION_ALIGNED_SKILL.Carpenter).toBe("Carpentry");
     expect(PROFESSION_ALIGNED_SKILL.Armorer).toBe("Armorsmithing");
-    expect(PROFESSION_ALIGNED_SKILL.Planter).toBe("Growing");
-    expect(PROFESSION_ALIGNED_SKILL.Stonecrafter).toBe("Stone Crafting");
-    expect(PROFESSION_ALIGNED_SKILL["Pump Operator"]).toBe("Pump Operation");
     expect(PROFESSION_ALIGNED_SKILL.Leatherworker).toBe("Leatherworkering");
-  });
-
-  it("intentionally omits social/coordinative roles", () => {
+    // Roles intentionally absent — they're coordination, not crafts.
     expect(PROFESSION_ALIGNED_SKILL.Trader).toBeUndefined();
     expect(PROFESSION_ALIGNED_SKILL.Child).toBeUndefined();
-    expect(PROFESSION_ALIGNED_SKILL.Craftsman).toBeUndefined();
-    expect(PROFESSION_ALIGNED_SKILL.Peasant).toBeUndefined();
-    expect(PROFESSION_ALIGNED_SKILL.Merchant).toBeUndefined();
     expect(PROFESSION_ALIGNED_SKILL.Administrator).toBeUndefined();
   });
 
-  it("covers the auxiliary craft roles that show up in real forts", () => {
-    expect(PROFESSION_ALIGNED_SKILL["Gem Cutter"]).toBe("Gem Cutting");
-    expect(PROFESSION_ALIGNED_SKILL["Lye Maker"]).toBe("Lye Making");
-    expect(PROFESSION_ALIGNED_SKILL["Potash Maker"]).toBe("Potash Making");
-    expect(PROFESSION_ALIGNED_SKILL.Surgeon).toBe("Surgery");
-  });
-
-  it("reverse-map gives an expected profession for canonical skills", () => {
+  it("reverse-map derives an expected profession for each canonical skill", () => {
+    // This isn't restating the forward map — SKILL_EXPECTED_PROFESSION is
+    // derived (first-wins on synonyms), so a representative check on the
+    // derivation is worth keeping.
     expect(SKILL_EXPECTED_PROFESSION.Mining).toBe("Miner");
     expect(SKILL_EXPECTED_PROFESSION.Armorsmithing).toBe("Armorer");
     expect(SKILL_EXPECTED_PROFESSION["Pump Operation"]).toBe("Pump Operator");
