@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { paginate } from "../pagination.js";
+import { paginate, paginateBySize } from "../pagination.js";
 import { jsonResult, errorResult, callToolTyped } from "./helpers.js";
 import { getReferenceDataset, REFERENCE_KINDS, type ReferenceKind } from "../lookup-cache.js";
 import type { ListMaterialsOut } from "../dfhack/proto-types.js";
@@ -38,7 +38,7 @@ function shapeReference(
   if (kind === "job_skills") {
     if (type) {
       const arr = (data[type] as unknown[]) ?? [];
-      return { kind, type, ...paginate(arr, offset ?? 0, limit ?? 100) };
+      return { kind, type, ...paginateBySize(arr, offset ?? 0, limit ?? 100) };
     }
     return { kind, data };
   }
@@ -47,7 +47,7 @@ function shapeReference(
   }
   const arrKey = ARRAY_KEY[kind]!;
   const arr = (data[arrKey] as unknown[]) ?? [];
-  return { kind, key: arrKey, ...paginate(arr, offset ?? 0, limit ?? 100) };
+  return { kind, key: arrKey, ...paginateBySize(arr, offset ?? 0, limit ?? 100) };
 }
 
 export function registerReferenceTools(server: McpServer) {
