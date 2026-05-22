@@ -8,6 +8,8 @@ import {
   STRUCTURED_NAME_NOTE,
 } from "./helpers.js";
 import { buildMortalityReport } from "../mortality.js";
+import { DFHackRPCError } from "../dfhack/client.js";
+import { CR_NOT_FOUND } from "../dfhack/codec.js";
 import type {
   GetWorldInfoOut,
   ListUnitsOut,
@@ -59,11 +61,23 @@ export function registerMortalityTool(server: McpServer) {
         };
         if (targetRace !== undefined) listInput["race"] = targetRace;
 
-        const coreResult = await callToolTyped<ListUnitsOut>("ListUnits", listInput);
-        const dead = coreResult.value ?? [];
+        // DFHack's ListUnits returns CR_NOT_FOUND when a race-filtered
+        // dead query matches zero units (e.g. no dead dwarves yet).
+        // Treat that as an empty list rather than a hard error.
+        let dead: UnitBase[] = [];
+        try {
+          const coreResult = await callToolTyped<ListUnitsOut>("ListUnits", listInput);
+          dead = (coreResult.value ?? []) as UnitBase[];
+        } catch (err: unknown) {
+          if (err instanceof DFHackRPCError && err.code === CR_NOT_FOUND) {
+            dead = [];
+          } else {
+            throw err;
+          }
+        }
         await enrichUnitList(dead);
 
-        const report = buildMortalityReport(dead as UnitBase[]);
+        const report = buildMortalityReport(dead);
         return jsonResult(report);
       } catch (err: unknown) {
         return errorResult(err);
