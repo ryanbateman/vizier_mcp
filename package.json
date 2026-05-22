@@ -1,6 +1,6 @@
 {
   "name": "@ryanbateman/vizier-mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "An helpful Vizier MCP server for understanding your Dwarf Fortress game state, via DFHack's remote API",
   "type": "module",
   "main": "build/index.js",
