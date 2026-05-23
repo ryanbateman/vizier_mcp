@@ -1,5 +1,5 @@
 // Wrapper around the `rpc.legends` Lua companion script. See
-// lua/rpc-legends.lua and UNLOCKING-LEGENDS.md for what it exposes and why.
+// lua/rpc/legends.lua and UNLOCKING-LEGENDS.md for what it exposes and why.
 //
 // Every Lua function returns `{ json.encode({ ok, data | error }) }` —
 // i.e. a single-element string list carrying a JSON envelope. callLegends
@@ -28,9 +28,9 @@ interface LegendsEnvelope<T> {
 export class ScriptMissingError extends Error {
   constructor() {
     super(
-      `The rpc-legends Lua companion script is not installed or could not ` +
-        `be reached. Install it from <vizier-mcp>/lua/rpc-legends.lua to ` +
-        `<DF install>/hack/scripts/rpc/legends.lua, then ensure ` +
+      `The rpc/legends Lua companion module is not installed or could not ` +
+        `be reached. Install it from <vizier-mcp>/lua/rpc/legends.lua to ` +
+        `<DF install>/hack/lua/rpc/legends.lua, then ensure ` +
         `VIZIER_ENABLE_RUN_LUA=1 is set. See legends_setup_check for full ` +
         `install instructions.`,
     );
@@ -83,7 +83,7 @@ export async function callLegends<T>(
   if (!payload) {
     throw new LegendsError(
       `rpc.legends.${fn} returned an empty response — the function may be ` +
-        `missing from the installed script. Reinstall lua/rpc-legends.lua ` +
+        `missing from the installed script. Reinstall lua/rpc/legends.lua ` +
         `from the Vizier MCP repo.`,
     );
   }
