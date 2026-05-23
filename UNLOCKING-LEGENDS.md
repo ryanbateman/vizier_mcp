@@ -205,6 +205,153 @@ Once the surface stabilises and is genuinely useful, Route B (typed
 proto methods in a DFHack fork) becomes the right port — same tools,
 cleaner wire format, works remotely.
 
+## Next batch: narrative artifact tools
+
+Once the Route A wire path is live-validated, the natural next layer is
+two composite tools that compose legends data with the existing item /
+unit surface. Both are read-only and assistive — they help the player
+*find and understand* what they already have, not act on their behalf.
+
+### `find_family_artifacts(unit, depth=2)`
+
+User-facing question: *"Show me artifacts tied to my expedition
+leader's family."* The composite tool resolves the unit to a histfigId,
+walks the histfig_links graph to `depth` generations, and pulls
+artifacts where any of those figures appears as owner, holder,
+family-claimant, or maker. Returns each with its name, the relation
+path that surfaced it ("forged by your leader's father"), current
+location (in this fort with tile coords, at another site, or carried
+by a known unit), and a key-events narrative built from
+`world.history.events` filtered by `.artifact == id`.
+
+Internal callflow per invocation:
+
+1. `describe_unit(name|id)` — existing, gets histfigId.
+2. `RunLua rpc.legends.trace_lineage [histfigId, depth]` — new.
+3. `RunLua rpc.legends.list_artifacts_by_hfs [hfid_list]` — new.
+4. `RunLua rpc.legends.describe_artifact [artifact_id]` × N — new.
+5. Server-side rank + bundle.
+
+### `find_notable_items(scope="fort", min_kills=0, include_artifacts=true)`
+
+User-facing question: *"What powerful or legendary items do I have?"*
+The composite tool surfaces three classes of "notable": artifacts in
+the fort, weapons with non-trivial kill histories
+(`item_actual.history_info.kills`), and masterworks tied to a
+documented creation event (`item_crafted.quality + masterpiece_event`).
+Each entry tagged with the reason it surfaced, current location, and
+the same narrative-string treatment as above.
+
+Internal callflow:
+
+1. `RunLua rpc.legends.list_artifacts_summary [site_id]` — new.
+2. `RunLua rpc.legends.list_kill_items [min_kills]` — new.
+3. Merge + rank server-side.
+4. `RunLua rpc.legends.describe_artifact [id]` or
+   `describe_combat_item [id]` × N to enrich top entries.
+
+### New Lua functions needed (rpc-legends extensions)
+
+| Function | Args | Returns |
+|---|---|---|
+| `trace_lineage` | `[hfid, depth]` | flat list of related hfids with relation labels + path |
+| `list_artifacts_by_hfs` | `[hfid_csv]` | artifact summaries where any hfid appears in owner / holder / family / maker |
+| `list_artifacts_summary` | `[site_id?]` | compact artifact list, optionally site-filtered |
+| `list_kill_items` | `[min_kills]` | non-artifact items with `history_info.kills` ≥ threshold |
+| `describe_artifact` | `[artifact_id]` | name, item, creator, creation year, location, holder, key events |
+
+Each function plus the existing three would bump `LEGENDS_SCHEMA` from
+1 → 2 once added. Narrative event strings rendered Lua-side from
+typed `history_event_*` records (no `dfhack.legends` helper exists —
+verified during the audit).
+
+### Caching strategy
+
+Lua-side caching pays back compound queries. TS-side caching beyond
+the existing `lookup-cache.ts` is unnecessary for this batch — the
+composition is cheap; the RPC walks are where time is spent.
+
+**Generation-tuple invalidation.** A single tuple gates the cache:
+
+```
+gen = (df.global.cur_year, #artifacts.all, #history.events)
+```
+
+Cur_year advances slowly. Artifact and event counts increment only on
+discrete in-game events (rare in fortress mode). When `gen` differs
+from the last build, prune. Worst-case staleness: until the next
+history event. Owner reassignment fires a
+`history_event_hf_does_interactionst` which bumps `#events` — so the
+tuple correctly catches "artifact changed hands."
+
+**Three canonical indexes** built once per generation:
+
+- `artifact_by_hf` — maps hfid → artifact ids (any of owner / holder /
+  family-claimant / maker). Speeds up `list_artifacts_by_hfs` from
+  O(N×artifacts) per query down to O(1) lookup after one O(artifacts)
+  build.
+- `events_by_artifact` — maps artifact_id → list of event records.
+  `describe_artifact` and key-event rendering become O(1).
+- `events_by_histfig` — maps hfid → list of event records. Reusable
+  for future narrative tools beyond artifacts.
+
+Lua module surface stays small:
+
+```lua
+local cache = {}
+local current_gen = nil
+
+local function memo(key, builder)
+  local g = generation()
+  if g ~= current_gen then cache = {}; current_gen = g end
+  if cache[key] == nil then cache[key] = builder() end
+  return cache[key]
+end
+```
+
+**What is NOT cached, ever:** anything position-derived
+(`dfhack.items.getPosition`, "carried by" attributions, current job
+state). These change every tick and freshness matters more than
+speed.
+
+**TS-side request-scoped dedup.** One narrow win — a `Map<id, Promise>`
+that lives for the duration of a single composite-tool handler so
+descendants that look up the same artifact share one RPC roundtrip.
+No persistence, no invalidation problem.
+
+**User escape hatch.** Both composite tools accept `refresh:true` to
+force the Lua cache to rebuild before serving, for the rare case
+where the user has just done something they suspect should change the
+result and the generation tuple hasn't caught it yet.
+
+### Open questions before building
+
+- **Lineage depth default.** Depth 2 = parents, grandparents, siblings,
+  spouse, children (~7-15 figures). Depth 3 adds great-grandparents,
+  aunts, uncles, cousins (~30+). Artifact set grows fast. Default 2;
+  cap at 4.
+- **`relation` field rendering.** Lua returns the structured path
+  (`["mother", "father"]`); TS composite tool turns it into prose
+  ("your leader's mother's father, Onul"). Decide where the prose
+  lives — leaning TS so the Lua side stays minimal data.
+- **"Carried by" detection.** When `getPosition` returns nil but
+  `artifact.site == fortress_site`, scan unit inventories to attribute
+  the artifact to a carrier. Worth the extra walk for narrative
+  payoff; cap the inventory scan to fortress citizens to bound cost.
+- **`find_notable_items` ranking.** Combine kill count, artifact
+  status, and quality into a single rank? Or three separate
+  sub-lists? Single rank reads better narratively; sub-lists are
+  easier to argue about. Lean single rank with the `reason` field
+  carrying the discrimination.
+
+### Ethos check
+
+Both tools are observation only. Neither suggests an action ("you
+should move the artifact to the noble's bedroom"). Neither modifies
+state. They surface what exists for the player to act on themselves.
+This is the [[read-only-assistive-ethos]] in practice — same lens
+applies to every future legends-side composite tool.
+
 ## Not in scope here
 
 The same architectural unlock — a small set of read-only, allow-listed
