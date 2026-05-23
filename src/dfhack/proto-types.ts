@@ -147,3 +147,79 @@ export interface GetWorldInfoOut {
   civId?: number;
   siteId?: number;
 }
+
+/** RFR MatPair: a (matType, matIndex) pair shared by Item.type, Item.material, etc. */
+export interface MatPair {
+  matType: number;
+  matIndex: number;
+}
+
+/** RFR ItemImprovement: decoration/inlay/engraving on an item. Presence of any
+ * improvement is the closest proxy RFR offers for "this item is valuable"
+ * (RFR has no quality field and no material-value field). */
+export interface ItemImprovement {
+  material?: MatPair;
+  shape?: number;
+  specificType?: number;
+  type?: number;
+}
+
+/** RFR Item: a single physical item on a tile. Stockpile assignment is NOT
+ * exposed (RFR has no stockpile-membership linkage); position is the item's
+ * tile only. */
+export interface RfrItem {
+  id?: number;
+  pos?: { x?: number; y?: number; z?: number };
+  type?: MatPair;
+  material?: MatPair;
+  stackSize?: number;
+  volume?: number;
+  improvements?: ItemImprovement[];
+  flags1?: number;
+  flags2?: number;
+}
+
+/** RFR MapBlock: a 16×16 tile chunk. `items[]` is what item_census consumes. */
+export interface MapBlockWithItems {
+  mapX?: number;
+  mapY?: number;
+  mapZ?: number;
+  items?: RfrItem[];
+  [key: string]: unknown;
+}
+
+/** RFR BlockList response (a sweep over GetBlockList returns these aggregated). */
+export interface BlockListOut {
+  mapBlocks?: MapBlockWithItems[];
+  mapX?: number;
+  mapY?: number;
+  [key: string]: unknown;
+}
+
+/** RFR MapInfo: embark dimensions/origin in BLOCK coords (each block = 16 tiles).
+ * Tile-space conversion: `tileX = blockX * 16`. */
+export interface MapInfoOut {
+  blockSizeX?: number;
+  blockSizeY?: number;
+  blockSizeZ?: number;
+  blockPosX?: number;
+  blockPosY?: number;
+  blockPosZ?: number;
+  worldName?: string;
+  worldNameEnglish?: string;
+  saveName?: string;
+}
+
+/** RFR ViewInfo: the player's current camera + cursor position in tile coords. */
+export interface ViewInfoOut {
+  viewPosX?: number;
+  viewPosY?: number;
+  viewPosZ?: number;
+  viewSizeX?: number;
+  viewSizeY?: number;
+  cursorPosX?: number;
+  cursorPosY?: number;
+  cursorPosZ?: number;
+  followUnitId?: number;
+  followItemId?: number;
+}

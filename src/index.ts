@@ -15,6 +15,7 @@ import { registerWorkforceTool } from "./tools/workforce.js";
 import { registerWorldInstrumentsTool } from "./tools/world-instruments.js";
 import { registerMilitiaTool } from "./tools/militia.js";
 import { registerMortalityTool } from "./tools/mortality.js";
+import { registerItemCensusTool } from "./tools/item-census.js";
 import { registerLuaTool } from "./tools/lua.js";
 import { disconnectClient } from "./dfhack/client.js";
 import { warmCache } from "./lookup-cache.js";
@@ -52,6 +53,7 @@ registerWorkforceTool(server);
 registerWorldInstrumentsTool(server);
 registerMilitiaTool(server);
 registerMortalityTool(server);
+registerItemCensusTool(server);
 if (runLuaEnabled()) registerLuaTool(server);
 
 let shuttingDown = false;
