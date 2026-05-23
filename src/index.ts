@@ -16,6 +16,7 @@ import { registerWorldInstrumentsTool } from "./tools/world-instruments.js";
 import { registerMilitiaTool } from "./tools/militia.js";
 import { registerMortalityTool } from "./tools/mortality.js";
 import { registerItemCensusTool } from "./tools/item-census.js";
+import { registerLegendsTools } from "./tools/legends.js";
 import { registerLuaTool } from "./tools/lua.js";
 import { disconnectClient } from "./dfhack/client.js";
 import { warmCache } from "./lookup-cache.js";
@@ -54,6 +55,10 @@ registerWorldInstrumentsTool(server);
 registerMilitiaTool(server);
 registerMortalityTool(server);
 registerItemCensusTool(server);
+// Legends tools always register — legends_setup_check is the discovery
+// entry point and must be reachable even when the companion script /
+// VIZIER_ENABLE_RUN_LUA aren't in place yet.
+registerLegendsTools(server);
 if (runLuaEnabled()) registerLuaTool(server);
 
 let shuttingDown = false;

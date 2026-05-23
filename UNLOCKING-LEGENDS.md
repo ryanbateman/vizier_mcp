@@ -168,6 +168,43 @@ upstream-friendly version. Vizier MCP's composite-tool layer is
 identical in either case; only the wire format and where the data is
 fetched from changes.
 
+## Status: Route A prototype shipped
+
+The companion script lives at `lua/rpc-legends.lua` in this repo. It
+currently exposes:
+
+- `ping` — schema probe; used by `legends_setup_check`.
+- `get_overview` — counts + year range across the six legends collections.
+- `describe_historical_figure` — by id; identity, race, dates, entity
+  links, relationships, current site.
+
+Vizier MCP registers three matching tools — `legends_setup_check`,
+`get_legends_overview`, `describe_historical_figure` — and they
+self-diagnose: if the script isn't installed, each returns a
+structured `status: "missing"` payload pointing at
+`legends_setup_check`, which carries full install instructions.
+
+### Install
+
+1. Copy `lua/rpc-legends.lua` to `<DF install>/hack/scripts/rpc/legends.lua`.
+2. Set `VIZIER_ENABLE_RUN_LUA=1` in the environment running `vizier-mcp`.
+3. Restart `vizier-mcp` and call `legends_setup_check` to confirm.
+
+### Extending
+
+The script is intentionally minimal. To add a function:
+
+1. Add a global function in `lua/rpc-legends.lua` returning
+   `{ json.encode({ ok = true, data = ... }) }` (or `{ ok = false, error = "…" }`).
+2. Add a tool in `src/tools/legends.ts` using `callLegends<T>("yourFn", args)`.
+3. Bump `LEGENDS_SCHEMA` if you make breaking changes to existing
+   payload shapes (the schema is reported by `ping` and surfaced by
+   `legends_setup_check`).
+
+Once the surface stabilises and is genuinely useful, Route B (typed
+proto methods in a DFHack fork) becomes the right port — same tools,
+cleaner wire format, works remotely.
+
 ## Not in scope here
 
 The same architectural unlock — a small set of read-only, allow-listed
