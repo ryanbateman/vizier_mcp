@@ -63,11 +63,19 @@ end
 
 local function name_string(name)
     if not name then return nil end
-    if dfhack.TranslateName then
-        local s = dfhack.TranslateName(name, true)
-        if s and s ~= "" then return s end
-    end
+    local fn = dfhack.translation and dfhack.translation.translateName
+    if not fn then return nil end
+    local ok_, s = pcall(fn, name, true)
+    if ok_ and s and s ~= "" then return s end
     return nil
+end
+
+-- Strip "<type: foo>" → "foo". DFHack's tostring on a polymorphic
+-- struct ref formats as the former; the bare type name reads cleaner.
+local function type_name(t)
+    if t == nil then return nil end
+    local s = tostring(t)
+    return s:match("<type: (.+)>") or s
 end
 
 -- Note on arguments: DFHack's RunLua pushes the protobuf `arguments`
@@ -138,7 +146,7 @@ function describe_historical_figure(...)
                 -- link._type is a userdata reference to the polymorphic
                 -- struct type; tostring() yields a readable name like
                 -- "histfig_entity_link_memberst".
-                linkType = tostring(link._type),
+                linkType = type_name(link._type),
             })
         end
         return out
@@ -149,7 +157,7 @@ function describe_historical_figure(...)
         for _, link in ipairs(hf.histfig_links) do
             table.insert(out, {
                 targetId = link.target_hf,
-                linkType = tostring(link._type),
+                linkType = type_name(link._type),
             })
         end
         return out
