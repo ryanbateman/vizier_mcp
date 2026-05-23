@@ -15,8 +15,8 @@ const INSTALL_INSTRUCTIONS = [
   "UNLOCKING-LEGENDS.md in the repo for why).",
   "",
   "Install:",
-  "  1. Copy lua/rpc-legends.lua from the Vizier MCP repo to:",
-  "       <DF install>/hack/scripts/rpc/legends.lua",
+  "  1. Copy lua/rpc/legends.lua from the Vizier MCP repo to:",
+  "       <DF install>/hack/lua/rpc/legends.lua",
   "  2. Ensure VIZIER_ENABLE_RUN_LUA=1 is set in the environment that runs",
   "     vizier-mcp (the run_lua tool must be registered).",
   "  3. Restart Vizier MCP if it was already running.",
@@ -24,8 +24,8 @@ const INSTALL_INSTRUCTIONS = [
 ].join("\n");
 
 const RUN_LUA_NOTE =
-  "Requires VIZIER_ENABLE_RUN_LUA=1 and the rpc-legends.lua companion " +
-  "script. If the tool reports the script is missing, call " +
+  "Requires VIZIER_ENABLE_RUN_LUA=1 and the rpc/legends.lua companion " +
+  "module. If the tool reports the script is missing, call " +
   "legends_setup_check for install instructions.";
 
 export function registerLegendsTools(server: McpServer) {
@@ -48,7 +48,7 @@ export function registerLegendsTools(server: McpServer) {
           message: schemaMatch
             ? "rpc.legends companion is installed and reachable."
             : `rpc.legends schema ${result.schema} does not match expected ${LEGENDS_SCHEMA}. ` +
-              `Update lua/rpc-legends.lua from the latest Vizier MCP repo.`,
+              `Update lua/rpc/legends.lua from the latest Vizier MCP repo.`,
         });
       } catch (err) {
         if (err instanceof ScriptMissingError) {

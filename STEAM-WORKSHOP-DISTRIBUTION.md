@@ -1,9 +1,23 @@
 # Distributing the rpc-legends companion via Steam Workshop
 
-A plan for replacing the manual `cp lua/rpc-legends.lua hack/scripts/rpc/legends.lua`
+A plan for replacing the manual `cp lua/rpc/legends.lua hack/lua/rpc/legends.lua`
 install step with a one-click Steam Workshop subscription. Written for the
 maintainer of Vizier MCP — covers the layout, the dev loop, the publish
 flow, and the open questions before this is worth committing to.
+
+> **⚠ NEEDS RE-VERIFICATION (2026-05-23).** This plan was originally
+> drafted assuming `rpc-legends.lua` is a DFHack *script* living in
+> `hack/scripts/rpc/legends.lua`, which is the bucket Workshop mods
+> populate via `scripts_modinstalled/`. **It isn't.** RunLua dispatches
+> through standard Lua `require()`, which searches `package.path` →
+> `hack/lua/`. The companion is a Lua *module*, not a script. Before
+> proceeding with the Workshop angle, verify whether Steam Workshop
+> mods can populate `hack/lua/` at all — does DFHack scan mod folders
+> for a `lua_modinstalled/` bucket, does `scripts_modinstalled/` also
+> get added to `package.path`, or is there no Workshop-native path
+> for shipping a Lua module? If none, the Workshop path is closed for
+> rpc-legends as-architected and we fall back to a manual install or
+> a release-tarball-with-installer.
 
 ## Why bother
 
@@ -32,7 +46,7 @@ vizier-rpc-legends/
   info.txt
   scripts_modinstalled/
     rpc/
-      legends.lua            ← contents of lua/rpc-legends.lua
+      legends.lua            ← contents of lua/rpc/legends.lua
   README.md                  ← short user-facing doc + link to vizier-mcp
   preview.png                ← Workshop tile image (optional but expected)
 ```
@@ -40,13 +54,13 @@ vizier-rpc-legends/
 Two choices for where this lives in the repo:
 
 1. **`mod/` directory at repo root.** Mod source-of-truth. The Lua
-   script is the *same file* as `lua/rpc-legends.lua` — either move
-   `lua/rpc-legends.lua` under `mod/scripts_modinstalled/rpc/legends.lua`
+   script is the *same file* as `lua/rpc/legends.lua` — either move
+   `lua/rpc/legends.lua` under `mod/scripts_modinstalled/rpc/legends.lua`
    and delete the old path, or keep `lua/` as the canonical source and
    add a build script that copies into `mod/` before upload. Recommend
    the move: one source of truth, no drift.
 
-2. **`workshop/` separate from `lua/`.** Keep `lua/rpc-legends.lua` as
+2. **`workshop/` separate from `lua/`.** Keep `lua/rpc/legends.lua` as
    the canonical source, copy into `workshop/scripts_modinstalled/rpc/legends.lua`
    via a build step. More moving parts, less risk of accidentally
    shipping the wrong file structure to non-Workshop users.
@@ -183,7 +197,7 @@ deliberately when the Lua-side payload shape breaks.
 
 ## Open questions / decisions still pending
 
-- **Do we move `lua/rpc-legends.lua` under `mod/`, or build it via a
+- **Do we move `lua/rpc/legends.lua` under `mod/`, or build it via a
   copy step?** Recommend: move it. Single source of truth. Update all
   doc references in one commit.
 - **Preview image.** Need to draw or pick something. Workshop tiles
@@ -195,7 +209,7 @@ deliberately when the Lua-side payload shape breaks.
   `vizier_rpc_jobs`). One mod per surface keeps each independently
   subscribable.
 - **`legends_setup_check` install copy.** Currently the diagnostic
-  prints "copy lua/rpc-legends.lua to hack/scripts/rpc/legends.lua".
+  prints "copy lua/rpc/legends.lua to hack/scripts/rpc/legends.lua".
   After Workshop ships, change the primary advice to "subscribe to the
   Vizier RPC – Legends bridge mod on Steam Workshop" with a Workshop
   URL, and keep the manual copy as the fallback for non-Steam users
@@ -215,7 +229,7 @@ deliberately when the Lua-side payload shape breaks.
 
 If we go ahead, the work is roughly:
 
-1. `git mv lua/rpc-legends.lua mod/scripts_modinstalled/rpc/legends.lua`
+1. `git mv lua/rpc/legends.lua mod/scripts_modinstalled/rpc/legends.lua`
 2. Add `mod/info.txt` from the template above (without `STEAM_FILE_ID`).
 3. Add a placeholder `mod/preview.png` and `mod/README.md`.
 4. Update `UNLOCKING-LEGENDS.md` install section: Workshop primary,

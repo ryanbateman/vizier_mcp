@@ -61,12 +61,15 @@ It's just not on the remote socket.
 ### Route A — A small Lua companion, no fork
 
 The `RunLua` module-name gate accepts any module named `rpc-legends`,
-`legends.rpc`, or `rpc.legends`. A modestly sized Lua script dropped into
-`hack/scripts/` of an *unmodified* DFHack — call it `rpc-legends.lua` —
-can expose whatever it likes from `dfhack.legends` and the
-`df.global.world.history.*` tables, returning serialisable Lua tables.
-The Vizier would then call `RunLua(module="rpc.legends", function="…")`
-and decode the result.
+`legends.rpc`, or `rpc.legends`. A modestly sized Lua module dropped
+into `hack/lua/rpc/legends.lua` of an *unmodified* DFHack — using
+DFHack's `mkmodule` convention — can expose whatever it likes from
+the `df.global.world.history.*` tables, returning serialisable Lua
+tables. The Vizier would then call
+`RunLua(module="rpc.legends", function="…")` and decode the result.
+(Note: `hack/scripts/` is for the in-game command prompt and is NOT
+on `package.path`; RunLua uses standard `require()` which searches
+`hack/lua/`.)
 
 This works **today**, on a stock DFHack, with no source changes. It works
 only for localhost callers — the `SF_ALLOW_REMOTE` check on `RunLua`
@@ -170,7 +173,7 @@ fetched from changes.
 
 ## Status: Route A prototype shipped
 
-The companion script lives at `lua/rpc-legends.lua` in this repo. It
+The companion script lives at `lua/rpc/legends.lua` in this repo. It
 currently exposes:
 
 - `ping` — schema probe; used by `legends_setup_check`.
@@ -186,7 +189,7 @@ structured `status: "missing"` payload pointing at
 
 ### Install
 
-1. Copy `lua/rpc-legends.lua` to `<DF install>/hack/scripts/rpc/legends.lua`.
+1. Copy `lua/rpc/legends.lua` to `<DF install>/hack/lua/rpc/legends.lua`.
 2. Set `VIZIER_ENABLE_RUN_LUA=1` in the environment running `vizier-mcp`.
 3. Restart `vizier-mcp` and call `legends_setup_check` to confirm.
 
@@ -194,7 +197,7 @@ structured `status: "missing"` payload pointing at
 
 The script is intentionally minimal. To add a function:
 
-1. Add a global function in `lua/rpc-legends.lua` returning
+1. Add a global function in `lua/rpc/legends.lua` returning
    `{ json.encode({ ok = true, data = ... }) }` (or `{ ok = false, error = "…" }`).
 2. Add a tool in `src/tools/legends.ts` using `callLegends<T>("yourFn", args)`.
 3. Bump `LEGENDS_SCHEMA` if you make breaking changes to existing
