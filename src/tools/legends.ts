@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { errorResult, jsonResult } from "./helpers.js";
+import { errorResult, jsonResult, STRUCTURED_NAME_NOTE } from "./helpers.js";
 import {
   callLegends,
   pingLegends,
@@ -106,6 +106,110 @@ export function registerLegendsTools(server: McpServer) {
           [String(id)],
         );
         return jsonResult(data);
+      } catch (err) {
+        return missingOrError(err);
+      }
+    },
+  );
+
+  server.tool(
+    "dwarf_biography",
+    "Full narrative biography of a dwarf (or any historical figure): " +
+      "identity, origins (birth year/site, parents, civ of origin), " +
+      "tenure in the fort, INNER LIFE (stress, personality traits, " +
+      "beliefs and values, deity, goals — RFR-blocked surface only " +
+      "reachable via the rpc.legends companion), immediate family + " +
+      "social links, career-event highlights, and a list of artifacts " +
+      "they crafted. Accept name (substring, case-insensitive), unit_id " +
+      "(active fortress unit), or histfig_id (any historical figure in " +
+      "the world). Name matching surfaces multiple hits if ambiguous — " +
+      "use one of the ids from that list to disambiguate." +
+      STRUCTURED_NAME_NOTE +
+      " " +
+      RUN_LUA_NOTE,
+    {
+      name: z
+        .string()
+        .optional()
+        .describe(
+          "Name substring (case-insensitive). Searches firstName and translated name.",
+        ),
+      unit_id: z
+        .number()
+        .int()
+        .optional()
+        .describe("Active fortress unit id."),
+      histfig_id: z
+        .number()
+        .int()
+        .optional()
+        .describe(
+          "Historical figure id (looked up directly, no translation needed).",
+        ),
+    },
+    async ({ name, unit_id, histfig_id }) => {
+      try {
+        let hfid: number | undefined = histfig_id;
+
+        if (hfid === undefined && unit_id !== undefined) {
+          const translate = await callLegends<{
+            histfigId: number | null;
+            isHistoricalFigure: boolean;
+          }>("find_histfig_by_unit_id", [String(unit_id)]);
+          if (!translate.isHistoricalFigure || translate.histfigId == null) {
+            return jsonResult({
+              status: "not_a_historical_figure",
+              unitId: unit_id,
+              message:
+                "This unit is not tracked as a historical figure (most " +
+                "wildlife and pets fall into this category). Biographies " +
+                "require a histfig id.",
+            });
+          }
+          hfid = translate.histfigId;
+        }
+
+        if (hfid === undefined && name) {
+          const search = await callLegends<{
+            matches: Array<{
+              id: number;
+              firstName?: string;
+              translatedName?: string;
+            }>;
+            total: number;
+          }>("find_histfig_by_name", [name, "10"]);
+          if (search.matches.length === 0) {
+            return jsonResult({
+              status: "no_match",
+              needle: name,
+              message:
+                "No historical figure matched that name. Try a different " +
+                "substring or pass histfig_id directly.",
+            });
+          }
+          if (search.matches.length > 1) {
+            return jsonResult({
+              status: "ambiguous",
+              needle: name,
+              candidates: search.matches,
+              message:
+                `${search.matches.length} matches — call dwarf_biography again ` +
+                `with histfig_id set to the right one.`,
+            });
+          }
+          hfid = search.matches[0]!.id;
+        }
+
+        if (hfid === undefined) {
+          return errorResult(
+            new Error(
+              "Must pass one of: name, unit_id, or histfig_id.",
+            ),
+          );
+        }
+
+        const bio = await callLegends<unknown>("get_biography", [String(hfid)]);
+        return jsonResult(bio);
       } catch (err) {
         return missingOrError(err);
       }
