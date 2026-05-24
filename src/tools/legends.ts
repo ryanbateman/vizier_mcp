@@ -8,6 +8,33 @@ import {
   LegendsError,
   LEGENDS_SCHEMA,
 } from "../dfhack/rpc-legends.js";
+import { ensureLookups } from "../lookup-cache.js";
+
+/**
+ * Resolve bare integer ids in identity (race, currentProfession) to
+ * names via the existing TS-side lookup cache. Mutates in place;
+ * silent if the bio is malformed or the cache is unavailable.
+ */
+async function enrichBiographyIdentity(bio: unknown): Promise<void> {
+  if (!bio || typeof bio !== "object") return;
+  const identity = (bio as { identity?: Record<string, unknown> }).identity;
+  if (!identity || typeof identity !== "object") return;
+  try {
+    const lookups = await ensureLookups();
+    const race = identity.race;
+    if (typeof race === "number" && lookups.creature) {
+      const name = lookups.creature.get(race);
+      if (name) identity.raceName = name;
+    }
+    const prof = identity.currentProfession;
+    if (typeof prof === "number") {
+      const def = lookups.profession.get(prof);
+      if (def) identity.currentProfessionName = def.caption;
+    }
+  } catch {
+    // best-effort enrichment; bare ids remain in the response
+  }
+}
 
 const INSTALL_INSTRUCTIONS = [
   "The legends tools rely on a tiny Lua companion script that lives inside",
@@ -209,6 +236,7 @@ export function registerLegendsTools(server: McpServer) {
         }
 
         const bio = await callLegends<unknown>("get_biography", [String(hfid)]);
+        await enrichBiographyIdentity(bio);
         return jsonResult(bio);
       } catch (err) {
         return missingOrError(err);
