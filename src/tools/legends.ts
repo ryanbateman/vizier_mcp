@@ -31,6 +31,9 @@ async function enrichBiographyIdentity(bio: unknown): Promise<void> {
       const def = lookups.profession.get(prof);
       if (def) identity.currentProfessionName = def.caption;
     }
+    const sex = identity.sex;
+    if (sex === 0) identity.sexName = "Female";
+    else if (sex === 1) identity.sexName = "Male";
   } catch {
     // best-effort enrichment; bare ids remain in the response
   }
