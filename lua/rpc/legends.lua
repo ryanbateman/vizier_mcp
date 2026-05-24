@@ -64,14 +64,34 @@ end
 -- Render a language_name struct. `in_english = true` returns the
 -- English translation (e.g. "Glazesuns"); false returns the native
 -- form as the DF UI displays it (e.g. "Fikodad").
+--
+-- DF stores strings as CP437 bytes; passing those through json.encode
+-- raw produces invalid UTF-8 (a bare 0x89 for ë, etc.) that the TS
+-- side strips. dfhack.df2utf transcodes CP437 -> UTF-8 so the JSON
+-- envelope round-trips intact.
 local function name_string(name, in_english)
     if not name then return nil end
     local fn = dfhack.translation and dfhack.translation.translateName
     if not fn then return nil end
     if in_english == nil then in_english = true end
     local ok_, s = pcall(fn, name, in_english)
-    if ok_ and s and s ~= "" then return s end
-    return nil
+    if not (ok_ and s and s ~= "") then return nil end
+    if dfhack.df2utf then
+        local ok2, utf = pcall(dfhack.df2utf, s)
+        if ok2 and utf then return utf end
+    end
+    return s
+end
+
+-- Resolve an enum code (int) to its symbolic name using a DFHack
+-- df.* enum table (e.g. df.value_type, df.goal_type). Returns the
+-- name string when known, or the bare code as a fallback so the
+-- caller still has *something* renderable.
+local function enum_name(enum, code)
+    if enum == nil or code == nil then return nil end
+    local ok_, name = pcall(function() return enum[code] end)
+    if ok_ and type(name) == "string" then return name end
+    return tostring(code)
 end
 
 -- Strip "<type: foo>" → "foo". DFHack's tostring on a polymorphic
@@ -98,7 +118,7 @@ end
 -- ping: probe whether the module is installed and callable.
 -- Returns the schema version so the client can detect mismatches.
 function ping(...)
-    return ok({ schema = 2, dfhack = dfhack.getDFHackVersion() })
+    return ok({ schema = 3, dfhack = dfhack.getDFHackVersion() })
 end
 
 -- get_overview: counts + year range for the four big legends collections.
@@ -280,20 +300,31 @@ function get_biography(...)
         }
     end
 
+    -- Per-call diagnostic: which link categories hit a pcall error
+    -- while iterating. Lets the consumer distinguish a real empty list
+    -- (e.g. migrant with no parents recorded) from a silently-eaten
+    -- DF-structures shape mismatch.
+    local link_errors = {}
+
     local function links_of_type(types)
         local out = {}
-        local ok_, _ = pcall(function()
+        local label = types[1] or "?"
+        local ok_outer, _ = pcall(function()
             for _, link in ipairs(hf.histfig_links) do
-                local tn = type_name(link._type)
-                for _, want in ipairs(types) do
-                    if tn == want then
-                        local r = ref(link.target_hf)
-                        if r then table.insert(out, r) end
-                        break
+                local ok_inner, _ = pcall(function()
+                    local tn = type_name(link._type)
+                    for _, want in ipairs(types) do
+                        if tn == want then
+                            local r = ref(link.target_hf)
+                            if r then table.insert(out, r) end
+                            break
+                        end
                     end
-                end
+                end)
+                if not ok_inner then link_errors[label] = true end
             end
         end)
+        if not ok_outer then link_errors[label] = true end
         return out
     end
 
@@ -346,10 +377,15 @@ function get_biography(...)
         local out = { hasSoul = soul ~= nil }
         if personality then
             out.stress = try(function() return personality.stress_level end)
+            -- traits is an int16 vector indexed by df.personality_facet_type
+            -- (the enum sometimes shows up as personality_facet under
+            -- different DF builds — try both). Values are 0-100 strengths.
             out.traits = try(function()
+                local enum = df.personality_facet_type or df.personality_facet
                 local traits = {}
                 for k, v in pairs(personality.traits) do
-                    traits[tostring(k)] = v
+                    local name = enum_name(enum, k) or tostring(k)
+                    traits[name] = v
                 end
                 return traits
             end)
@@ -357,7 +393,8 @@ function get_biography(...)
                 local vals = {}
                 for _, v in ipairs(personality.values) do
                     table.insert(vals, {
-                        type = type_name(v.type),
+                        type = enum_name(df.value_type, v.type),
+                        typeCode = v.type,
                         strength = v.strength,
                     })
                 end
@@ -366,7 +403,10 @@ function get_biography(...)
             out.goals = try(function()
                 local goals = {}
                 for _, g in ipairs(personality.dreams or {}) do
-                    table.insert(goals, type_name(g.type))
+                    table.insert(goals, {
+                        type = enum_name(df.goal_type, g.type),
+                        typeCode = g.type,
+                    })
                 end
                 return goals
             end)
@@ -445,6 +485,12 @@ function get_biography(...)
         return out
     end) or {}
 
+    -- Surface which link categories had iteration errors. Empty table
+    -- means every category iterated cleanly (so an empty `parents` is
+    -- a real fact about the dwarf, not a swallowed exception).
+    local link_errors_list = {}
+    for k, _ in pairs(link_errors) do table.insert(link_errors_list, k) end
+
     return ok({
         identity = identity,
         origins = origins,
@@ -453,6 +499,7 @@ function get_biography(...)
         social = social,
         careerHighlights = career_highlights,
         craftedOutput = crafted_output,
+        linkErrors = link_errors_list,
     })
 end
 
