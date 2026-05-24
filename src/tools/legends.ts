@@ -60,6 +60,20 @@ async function enrichBiography(bio: unknown): Promise<void> {
         }
       }
     }
+    // backstory.kills.killedRaceCounts: { "<raceId>": count } -> resolve
+    // race ids alongside as a parallel { "<raceName>": count } map.
+    const backstory = (bio as { backstory?: { kills?: { killedRaceCounts?: unknown } } }).backstory;
+    const counts = backstory?.kills?.killedRaceCounts;
+    if (counts && typeof counts === "object" && lookups.creature) {
+      const named: Record<string, number> = {};
+      for (const [rid, count] of Object.entries(counts)) {
+        const n = lookups.creature.get(Number(rid));
+        if (n && typeof count === "number") named[n] = count;
+      }
+      if (Object.keys(named).length > 0) {
+        (backstory!.kills as Record<string, unknown>).killedRaceNames = named;
+      }
+    }
   } catch {
     // best-effort enrichment; bare ids remain in the response
   }
