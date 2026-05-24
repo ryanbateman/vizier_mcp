@@ -53,8 +53,33 @@ local _ENV = mkmodule('rpc.legends')
 
 local json = require('json')
 
+-- Walk a payload table, converting DFHack userdata fields to JSON-safe
+-- values (number where possible, else string, else nil). Without this,
+-- any typed enum/struct field that DFHack hands us as userdata trips
+-- json.encode with "can't convert userdata to JSON" and the whole call
+-- becomes opaque. Recursive but bounded by payload depth.
+local function sanitize(v)
+    local t = type(v)
+    if t == "table" then
+        local out = {}
+        for k, vv in pairs(v) do
+            out[k] = sanitize(vv)
+        end
+        return out
+    end
+    if t == "userdata" then
+        local n = tonumber(v)
+        if n then return n end
+        local ok_, s = pcall(tostring, v)
+        if ok_ and s then return s end
+        return nil
+    end
+    if t == "function" or t == "thread" then return nil end
+    return v
+end
+
 local function ok(payload)
-    return json.encode({ ok = true, data = payload })
+    return json.encode({ ok = true, data = sanitize(payload) })
 end
 
 local function err(message)
@@ -292,6 +317,17 @@ function get_biography(...)
     local hf = df.historical_figure.find(id)
     if not hf then return err("histfig not found: " .. tostring(id)) end
 
+    -- Top-level pcall so an uncaught error in any section returns as a
+    -- LegendsError with the actual message instead of a CR_FAILURE
+    -- that the TS-side maps to ScriptMissingError.
+    local ok_body, result_or_err = pcall(function()
+        return _build_biography(id, hf)
+    end)
+    if ok_body then return result_or_err end
+    return err("get_biography internal error: " .. tostring(result_or_err))
+end
+
+function _build_biography(id, hf)
     -- Locate the live unit (if any) for personality/thoughts/stress.
     local unit = nil
     for _, u in ipairs(df.global.world.units.active) do
@@ -559,14 +595,16 @@ function get_biography(...)
             local k = hf.info.kills
             if not k then return nil end
             local events = k.events or {}
+            -- killed_race is a flat vector of race-ids — one entry per
+            -- kill, not a count-per-race-index. Bucket into {raceId: count}.
             local races = {}
-            for i, count in ipairs(k.killed_race or {}) do
-                if count and count > 0 then races[tostring(i)] = count end
+            for _, race_id in ipairs(k.killed_race or {}) do
+                local key = tostring(tonumber(race_id) or race_id)
+                races[key] = (races[key] or 0) + 1
             end
             return {
                 eventCount = #events,
                 killedRaceCounts = next(races) and races or nil,
-                killedUndeadCount = try(function() return k.killed_undead end),
             }
         end)
         out.skills = try(function()
@@ -593,7 +631,11 @@ function get_biography(...)
             local w = hf.info.whereabouts
             if not w then return nil end
             return {
-                state = try(function() return tostring(w.state) end),
+                state = try(function()
+                    local enum = df.whereabouts_type or df.unit_whereabouts_state
+                    return enum_name(enum, tonumber(w.state)) or tostring(w.state)
+                end),
+                stateCode = try(function() return tonumber(w.state) end),
                 regionId = try(function() return w.region_id end),
                 siteId = try(function() return w.site_id end),
                 armyId = try(function() return w.army_id end),
