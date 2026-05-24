@@ -11,29 +11,55 @@ import {
 import { ensureLookups } from "../lookup-cache.js";
 
 /**
- * Resolve bare integer ids in identity (race, currentProfession) to
+ * Resolve bare integer ids in identity (race, currentProfession) and
+ * preferences (creatureId, matType+matIndex, itemType+itemSubtype) to
  * names via the existing TS-side lookup cache. Mutates in place;
  * silent if the bio is malformed or the cache is unavailable.
  */
-async function enrichBiographyIdentity(bio: unknown): Promise<void> {
+async function enrichBiography(bio: unknown): Promise<void> {
   if (!bio || typeof bio !== "object") return;
-  const identity = (bio as { identity?: Record<string, unknown> }).identity;
-  if (!identity || typeof identity !== "object") return;
   try {
     const lookups = await ensureLookups();
-    const race = identity.race;
-    if (typeof race === "number" && lookups.creature) {
-      const name = lookups.creature.get(race);
-      if (name) identity.raceName = name;
+    const identity = (bio as { identity?: Record<string, unknown> }).identity;
+    if (identity && typeof identity === "object") {
+      const race = identity.race;
+      if (typeof race === "number" && lookups.creature) {
+        const name = lookups.creature.get(race);
+        if (name) identity.raceName = name;
+      }
+      const prof = identity.currentProfession;
+      if (typeof prof === "number") {
+        const def = lookups.profession.get(prof);
+        if (def) identity.currentProfessionName = def.caption;
+      }
+      const sex = identity.sex;
+      if (sex === 0) identity.sexName = "Female";
+      else if (sex === 1) identity.sexName = "Male";
     }
-    const prof = identity.currentProfession;
-    if (typeof prof === "number") {
-      const def = lookups.profession.get(prof);
-      if (def) identity.currentProfessionName = def.caption;
+    const inner = (bio as { innerLife?: { preferences?: unknown } }).innerLife;
+    const prefs = inner?.preferences;
+    if (Array.isArray(prefs)) {
+      for (const raw of prefs) {
+        const p = raw as Record<string, unknown>;
+        const creatureId = p.creatureId;
+        if (typeof creatureId === "number" && lookups.creature) {
+          const n = lookups.creature.get(creatureId);
+          if (n) p.creatureName = n;
+        }
+        const matType = p.matType;
+        const matIndex = p.matIndex;
+        if (typeof matType === "number" && typeof matIndex === "number") {
+          const n = lookups.material.get(`${matType}/${matIndex}`);
+          if (n) p.materialName = n;
+        }
+        const itemType = p.itemType;
+        const itemSubtype = p.itemSubtype;
+        if (typeof itemType === "number" && typeof itemSubtype === "number") {
+          const n = lookups.itemType.get(`${itemType}/${itemSubtype}`);
+          if (n) p.itemTypeName = n;
+        }
+      }
     }
-    const sex = identity.sex;
-    if (sex === 0) identity.sexName = "Female";
-    else if (sex === 1) identity.sexName = "Male";
   } catch {
     // best-effort enrichment; bare ids remain in the response
   }
@@ -239,7 +265,7 @@ export function registerLegendsTools(server: McpServer) {
         }
 
         const bio = await callLegends<unknown>("get_biography", [String(hfid)]);
-        await enrichBiographyIdentity(bio);
+        await enrichBiography(bio);
         return jsonResult(bio);
       } catch (err) {
         return missingOrError(err);
