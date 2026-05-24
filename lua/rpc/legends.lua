@@ -155,7 +155,7 @@ end
 -- ping: probe whether the module is installed and callable.
 -- Returns the schema version so the client can detect mismatches.
 function ping(...)
-    return ok({ schema = 4, dfhack = dfhack.getDFHackVersion() })
+    return ok({ schema = 5, dfhack = dfhack.getDFHackVersion() })
 end
 
 -- get_overview: counts + year range for the four big legends collections.
@@ -300,6 +300,98 @@ function find_histfig_by_name(...)
         end
     end
     return ok({ matches = results, total = #results })
+end
+
+-- list_noble_positions: walk historical_entity.positions.assignments for
+-- the player's fortress group and parent civ (or all entities, on
+-- request) and return one record per assignment. Each record carries
+-- the entity id, the position code (e.g. "CHIEF_MEDICAL_DWARF") +
+-- display name, and the holder's histfigId resolved through ref() so
+-- the caller has enough to pivot straight into dwarf_biography.
+--
+-- Args: { scope? } where scope ∈ "fort" | "civ" | "fort_and_civ" (default) | "all"
+--
+-- entity.positions is a struct with two parallel vectors: `own` (the
+-- position definitions) and `assignments` (who currently holds them,
+-- keyed by position_id which is the definition's local id, not its
+-- code). Vacant positions are surfaced with vacant=true so a player
+-- can see what's currently unfilled.
+function list_noble_positions(...)
+    local scope = tostring(select(1, ...) or "fort_and_civ")
+
+    -- Local ref helper: same shape as the one inside get_biography.
+    -- Inlined here to avoid restructuring; cheap.
+    local function ref(target_hf_id)
+        if not target_hf_id or target_hf_id == -1 then return nil end
+        local h = df.historical_figure.find(target_hf_id)
+        if not h then return { id = target_hf_id } end
+        return {
+            id = target_hf_id,
+            firstName = df_string(h.name.first_name),
+            displayName = name_string(h.name, false),
+            englishName = name_string(h.name, true),
+            alive = h.died_year == -1,
+        }
+    end
+
+    local entity_ids = {}
+    local seen = {}
+    local function add_entity(eid)
+        if eid and eid ~= -1 and not seen[eid] then
+            seen[eid] = true
+            entity_ids[#entity_ids + 1] = eid
+        end
+    end
+
+    if scope == "fort" or scope == "fort_and_civ" then
+        local fort = try(function() return df.global.plotinfo.main.fortress_entity end)
+        if fort then add_entity(fort.id) end
+    end
+    if scope == "civ" or scope == "fort_and_civ" then
+        local civ_id = try(function() return df.global.plotinfo.civ_id end)
+        add_entity(civ_id)
+    end
+    if scope == "all" then
+        for _, ent in ipairs(df.global.world.entities.all) do
+            add_entity(ent.id)
+        end
+    end
+
+    local out = {}
+    for _, eid in ipairs(entity_ids) do
+        local ent = df.historical_entity.find(eid)
+        if ent and ent.positions then
+            local positions_by_id = {}
+            for _, pos in ipairs(ent.positions.own or {}) do
+                positions_by_id[pos.id] = pos
+            end
+            for _, asn in ipairs(ent.positions.assignments or {}) do
+                local pos = positions_by_id[asn.position_id]
+                if pos then
+                    local hfid = asn.histfig
+                    local entry = {
+                        entityId = ent.id,
+                        positionCode = try(function() return pos.code end),
+                        positionName = try(function()
+                            return pos.name and pos.name[0] and df_string(pos.name[0])
+                        end),
+                        positionNamePlural = try(function()
+                            return pos.name and pos.name[1] and df_string(pos.name[1])
+                        end),
+                    }
+                    if hfid and hfid ~= -1 then
+                        entry.holder = ref(hfid)
+                        entry.vacant = false
+                    else
+                        entry.vacant = true
+                    end
+                    table.insert(out, entry)
+                end
+            end
+        end
+    end
+
+    return ok({ positions = out, total = #out })
 end
 
 -- get_biography: composite "tell me about this dwarf" data.

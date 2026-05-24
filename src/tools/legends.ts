@@ -286,6 +286,41 @@ export function registerLegendsTools(server: McpServer) {
       }
     },
   );
+
+  server.tool(
+    "list_fortress_nobles",
+    "List the current noble-position assignments in the fortress group " +
+      "and parent civilisation. One record per assignment, with " +
+      "positionCode (e.g. CHIEF_MEDICAL_DWARF), positionName (display " +
+      "form), and the holder resolved to a histfig ref with displayName + " +
+      "histfigId — pivot straight into dwarf_biography with that id. " +
+      "Vacant positions are surfaced with vacant=true. " +
+      "Default scope is fort+civ; pass scope=all to walk every entity " +
+      "(big payload). Replaces the prior describe_unit-per-candidate " +
+      "scan for role-based lookups ('who is my mayor / broker / chief " +
+      "medical dwarf'). " +
+      RUN_LUA_NOTE,
+    {
+      scope: z
+        .enum(["fort", "civ", "fort_and_civ", "all"])
+        .optional()
+        .describe(
+          "Which entities to walk. 'fort' = the fortress group only; " +
+            "'civ' = parent civilisation only; 'fort_and_civ' (default) = " +
+            "both; 'all' = every entity in the world (large response).",
+        ),
+    },
+    async ({ scope }) => {
+      try {
+        const data = await callLegends<unknown>("list_noble_positions", [
+          scope ?? "fort_and_civ",
+        ]);
+        return jsonResult(data);
+      } catch (err) {
+        return missingOrError(err);
+      }
+    },
+  );
 }
 
 /**
