@@ -83,6 +83,18 @@ local function name_string(name, in_english)
     return s
 end
 
+-- Transcode a raw DF (CP437) string field to UTF-8 so accented
+-- characters survive the json.encode + JS UTF-8 decode round trip.
+-- Returns nil for empty/missing input so callers can chain `or nil`.
+local function df_string(s)
+    if s == nil or s == "" then return nil end
+    if dfhack.df2utf then
+        local ok_, utf = pcall(dfhack.df2utf, s)
+        if ok_ and utf then return utf end
+    end
+    return s
+end
+
 -- Resolve an enum code (int) to its symbolic name using a DFHack
 -- df.* enum table (e.g. df.value_type, df.goal_type). Returns the
 -- name string when known, or the bare code as a fallback so the
@@ -194,7 +206,7 @@ function describe_historical_figure(...)
         id = hf.id,
         name = try(function()
             return {
-                firstName = (hf.name.first_name ~= "" and hf.name.first_name) or nil,
+                firstName = df_string(hf.name.first_name),
                 translatedName = name_string(hf.name),
             }
         end),
@@ -253,7 +265,7 @@ function find_histfig_by_name(...)
         if contains(first) or contains(english) or contains(native) then
             table.insert(results, {
                 id = hf.id,
-                firstName = (first ~= "" and first) or nil,
+                firstName = df_string(first),
                 displayName = native,
                 englishName = english,
                 race = hf.race,
@@ -293,7 +305,7 @@ function get_biography(...)
         if not h then return { id = target_hf_id } end
         return {
             id = target_hf_id,
-            firstName = (h.name.first_name ~= "" and h.name.first_name) or nil,
+            firstName = df_string(h.name.first_name),
             displayName = name_string(h.name, false),
             englishName = name_string(h.name, true),
             alive = h.died_year == -1,
@@ -333,13 +345,13 @@ function get_biography(...)
             histfigId = hf.id,
             unitId = unit and unit.id or nil,
             name = {
-                firstName = (hf.name.first_name ~= "" and hf.name.first_name) or nil,
+                firstName = df_string(hf.name.first_name),
                 -- displayName = the dwarvish surname as the DF UI shows
                 -- it (e.g. "Fikodad"); englishName = translation flavour
                 -- (e.g. "Glazesuns").
                 displayName = name_string(hf.name, false),
                 englishName = name_string(hf.name, true),
-                nickname = (hf.name.nickname ~= "" and hf.name.nickname) or nil,
+                nickname = df_string(hf.name.nickname),
             },
             race = hf.race,
             caste = hf.caste,
