@@ -130,7 +130,7 @@ end
 -- ping: probe whether the module is installed and callable.
 -- Returns the schema version so the client can detect mismatches.
 function ping(...)
-    return ok({ schema = 3, dfhack = dfhack.getDFHackVersion() })
+    return ok({ schema = 4, dfhack = dfhack.getDFHackVersion() })
 end
 
 -- get_overview: counts + year range for the four big legends collections.
@@ -422,6 +422,34 @@ function get_biography(...)
                 end
                 return goals
             end)
+            -- preferences: the "likes copper for its colour" data. Each
+            -- entry's payload depends on .type — pcall every probe so a
+            -- shape-mismatched subfield doesn't kill the whole list.
+            -- TS side resolves creatureId/material/itemType ids to names
+            -- via the existing lookup cache.
+            out.preferences = try(function()
+                local enum = df.unit_preference and df.unit_preference.T_type
+                local prefs = {}
+                for _, p in ipairs(personality.preferences or {}) do
+                    local entry = {
+                        type = enum_name(enum, p.type),
+                        typeCode = p.type,
+                    }
+                    entry.itemType = try(function() return p.item_type end)
+                    entry.itemSubtype = try(function() return p.item_subtype end)
+                    entry.matType = try(function() return p.mattype end)
+                    entry.matIndex = try(function() return p.matindex end)
+                    entry.creatureId = try(function() return p.creature_id end)
+                    entry.colorId = try(function() return p.color_id end)
+                    entry.shapeId = try(function() return p.shape_id end)
+                    entry.plantId = try(function() return p.plant_id end)
+                    entry.poeticFormId = try(function() return p.poetic_form_id end)
+                    entry.musicalFormId = try(function() return p.musical_form_id end)
+                    entry.danceFormId = try(function() return p.dance_form_id end)
+                    table.insert(prefs, entry)
+                end
+                return prefs
+            end)
         end
         return out
     end) or nil
@@ -438,43 +466,147 @@ function get_biography(...)
                 "histfig_hf_link_motherst",
                 "histfig_hf_link_fatherst",
             }),
+            siblings = links_of_type({ "histfig_hf_link_siblingst" }),
             lovers = links_of_type({ "histfig_hf_link_loverst" }),
             companions = links_of_type({ "histfig_hf_link_companionst" }),
+            friends = links_of_type({ "histfig_hf_link_friendst" }),
+            grudges = links_of_type({ "histfig_hf_link_grudgest" }),
+            pets = links_of_type({ "histfig_hf_link_pet_ownerst" }),
+            apprentices = links_of_type({ "histfig_hf_link_apprenticest" }),
+            masters = links_of_type({ "histfig_hf_link_masterst" }),
             deity = links_of_type({ "histfig_hf_link_deityst" })[1],
         }
     end)
 
-    -- Career events: filter world.history.events by .histfig == id.
-    -- DF events are polymorphic; subclasses store the focal histfig in
-    -- different fields. Defensive: try common ones and surface a
-    -- type_name + year so the TS side can render narrative strings.
+    -- Strip history_event_ prefix and trailing 'st' from a polymorphic
+    -- event type symbol. history_event_hist_figure_diedst -> hist_figure_died.
+    local function event_type(ev)
+        local t = type_name(ev._type)
+        if not t then return nil end
+        t = t:gsub("^history_event_", ""):gsub("st$", "")
+        return t
+    end
+
+    -- Career events: walk world.history.events for any field that holds
+    -- this histfig's id, record WHICH field matched (so the narrator can
+    -- distinguish "slew X" from "was slain by X"), and resolve the OTHER
+    -- party's id to a name where the event has a paired field.
+    --
+    -- Roles seen so far in DF events: histfig/histfig_id (single-subject),
+    -- actor + target_hf / targeted_histfig (initiator + target),
+    -- slayer_hf + victim_hf (lethal), persecutor + target_hf, etc.
+    --
+    -- Defensive: DFHack's Lua bindings raise on accessing a field that
+    -- doesn't exist on the concrete subclass, so every probe is pcall'd.
+    local function paired_field(role)
+        if role == "slayer_hf" then return "victim", "victim" end
+        if role == "victim" then return "slayer_hf", "slayer" end
+        if role == "actor" then return "target_hf", "target" end
+        if role == "target_hf" then return "actor", "actor" end
+        if role == "targeted_histfig" then return "actor", "actor" end
+        return nil, nil
+    end
+
     local career_highlights = try(function()
         local events = df.global.world.history.events
         local out = {}
         local total = 0
         for _, ev in ipairs(events) do
-            -- Each event's field set varies by subclass; DFHack's Lua
-            -- bindings raise on accessing a field that doesn't exist
-            -- on this concrete subclass. pcall every probe so one
-            -- subclass's missing field doesn't kill the whole walk.
-            local matches = false
+            local role = nil
             for _, field in ipairs({ "histfig", "histfig_id", "actor",
-                                     "slayer_hf", "targeted_histfig", "victim" }) do
+                                     "slayer_hf", "victim", "targeted_histfig",
+                                     "target_hf" }) do
                 local ok_, v = pcall(function() return ev[field] end)
-                if ok_ and v and v == id then matches = true; break end
+                if ok_ and v and v == id then role = field; break end
             end
-            if matches then
+            if role then
                 total = total + 1
                 if #out < 20 then
-                    table.insert(out, {
+                    local entry = {
                         eventId = try(function() return ev.id end),
                         year = try(function() return ev.year end),
-                        type = try(function() return type_name(ev._type) end),
-                    })
+                        type = try(function() return event_type(ev) end),
+                        rawType = try(function() return type_name(ev._type) end),
+                        role = role,
+                    }
+                    local other_field, other_label = paired_field(role)
+                    if other_field then
+                        local ok_, other_id = pcall(function() return ev[other_field] end)
+                        if ok_ and other_id and other_id ~= -1 then
+                            entry.otherRole = other_label
+                            entry.other = ref(other_id)
+                        end
+                    end
+                    table.insert(out, entry)
                 end
             end
         end
         return { recent = out, totalEvents = total }
+    end)
+
+    -- Worldgen backstory: hf.info carries data accrued during world
+    -- generation — kills, skills learned, masterpieces, whereabouts,
+    -- secrets. Especially load-bearing for older dwarves born before
+    -- the fort was founded (e.g. a 56-year-old who walked in as a
+    -- migrant carries an entire pre-fort life here).
+    --
+    -- hf.info itself may be nil for very simple histfigs; each
+    -- subfield is its own optional pointer. pcall every probe.
+    local backstory = try(function()
+        if not hf.info then return nil end
+        local out = {}
+        out.kills = try(function()
+            local k = hf.info.kills
+            if not k then return nil end
+            local events = k.events or {}
+            local races = {}
+            for i, count in ipairs(k.killed_race or {}) do
+                if count and count > 0 then races[tostring(i)] = count end
+            end
+            return {
+                eventCount = #events,
+                killedRaceCounts = next(races) and races or nil,
+                killedUndeadCount = try(function() return k.killed_undead end),
+            }
+        end)
+        out.skills = try(function()
+            local s = hf.info.skills
+            if not s then return nil end
+            local list = {}
+            for _, entry in ipairs(s.skills or {}) do
+                table.insert(list, {
+                    type = enum_name(df.job_skill, entry.type),
+                    typeCode = try(function() return entry.type end),
+                    rating = try(function() return entry.rating end),
+                })
+            end
+            return list
+        end)
+        out.masterpieces = try(function()
+            local m = hf.info.masterpieces
+            if not m then return nil end
+            return {
+                eventCount = try(function() return #(m.events or {}) end),
+            }
+        end)
+        out.whereabouts = try(function()
+            local w = hf.info.whereabouts
+            if not w then return nil end
+            return {
+                state = try(function() return tostring(w.state) end),
+                regionId = try(function() return w.region_id end),
+                siteId = try(function() return w.site_id end),
+                armyId = try(function() return w.army_id end),
+            }
+        end)
+        out.secret = try(function()
+            local s = hf.info.secret
+            if not s then return nil end
+            return {
+                knowsSecrets = true,
+            }
+        end)
+        return out
     end)
 
     local crafted_output = try(function()
@@ -511,6 +643,7 @@ function get_biography(...)
         social = social,
         careerHighlights = career_highlights,
         craftedOutput = crafted_output,
+        backstory = backstory,
         linkErrors = link_errors_list,
     })
 end
