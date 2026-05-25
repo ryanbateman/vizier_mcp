@@ -727,7 +727,12 @@ function _build_biography(id, hf, resolve)
         if ent then refs.entity = entity_ref(ent, resolve) end
         local pos = field("position") or field("position_id")
         if pos then refs.position = position_ref(ent, pos, resolve) end
-        local wc = field("wc") or field("written_content") or field("written_content_id")
+        -- written_content_composedst uses `content` for the wc id
+        -- (verified via inspect_event 2026-05-25). Other variants kept
+        -- as fallbacks against future event subclasses.
+        local wc = field("content") or field("wc_id") or field("wc")
+            or field("written_content") or field("written_content_id")
+            or field("content_id")
         if wc then refs.writtenContent = written_content_ref(wc, resolve) end
 
         if next(refs) == nil then return nil end
@@ -966,6 +971,44 @@ function describe_entity(...)
         typeCode = try(function() return tonumber(e.type) end),
         race = try(function() return e.race end),
         leaders = leaders,
+    })
+end
+
+-- inspect_event (diagnostic): dump the field names + scalar values
+-- on a history event by id, so we can discover the actual field name
+-- for new ref-probing (e.g. which field on written_content_composedst
+-- carries the wc id). Not exposed as an MCP tool — call via
+-- callLegends("inspect_event", [id]). Args: { eventId }.
+function inspect_event(...)
+    local id = tonumber(select(1, ...))
+    if not id then return err("missing event id (first arg)") end
+    local target = nil
+    for _, ev in ipairs(df.global.world.history.events) do
+        if ev.id == id then target = ev; break end
+    end
+    if not target then return err("event not found: " .. tostring(id)) end
+
+    local fields = {}
+    for k, v in pairs(target) do
+        local tk = type(k)
+        local key = tk == "string" and k or tostring(k)
+        local tv = type(v)
+        local repr = nil
+        if tv == "number" or tv == "boolean" or tv == "string" then
+            repr = v
+        elseif tv == "userdata" then
+            repr = tostring(v)
+        else
+            repr = tv
+        end
+        fields[key] = repr
+    end
+
+    return ok({
+        id = id,
+        type = type_name(target._type),
+        year = try(function() return target.year end),
+        fields = fields,
     })
 end
 
