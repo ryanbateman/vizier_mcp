@@ -155,7 +155,7 @@ end
 -- ping: probe whether the module is installed and callable.
 -- Returns the schema version so the client can detect mismatches.
 function ping(...)
-    return ok({ schema = 5, dfhack = dfhack.getDFHackVersion() })
+    return ok({ schema = 6, dfhack = dfhack.getDFHackVersion() })
 end
 
 -- get_overview: counts + year range for the four big legends collections.
@@ -779,6 +779,296 @@ function _build_biography(id, hf)
         craftedOutput = crafted_output,
         backstory = backstory,
         linkErrors = link_errors_list,
+    })
+end
+
+-- living_legends: "who matters in this world right now" — a curated digest
+-- of prominent historical figures, classified by why they're notable.
+-- Categories surfaced:
+--   civLeaders        — holders of LAW_MAKING positions in Civilization
+--                       entities (kings, queens, lawgivers across all civs)
+--   artifactCreators  — top-N histfigs by count of artifacts they crafted,
+--                       with sample artifact names (dead or alive — the
+--                       artifact's fame outlives the maker)
+--   megabeasts        — alive race-MEGABEAST histfigs (rocs, dragons, etc.)
+--   semimegabeasts    — alive race-SEMIMEGABEAST histfigs
+--   forgottenBeasts   — alive race-FEATURE_BEAST histfigs (cavern dwellers)
+--   nightCreatures    — alive race-NIGHT_CREATURE_* (bogeymen, nightmares...)
+--   demons            — alive race-UNIQUE_DEMON
+--   titans            — alive race-TITAN
+--   necromancers      — alive histfigs with hf.info.secret set
+--   cursedFigures     — alive histfigs with curse_year set (vampires/were-)
+--   heroes            — alive histfigs with kill_count >= 10 not in a beast
+--                       category, sorted by kill count, capped at 30
+--
+-- Each entry carries enough for the caller to pivot to dwarf_biography:
+-- histfigId, names, race id, birth/death years, alive flag, plus
+-- category-specific context (positionCode for leaders, artifactCount for
+-- creators, killCount for heroes, whereabouts for beasts).
+--
+-- Args: { include_dead? } — pass "include_dead" to also surface deceased
+-- figures across non-artifact categories (default: alive-only for beasts/
+-- leaders/necromancers; artifactCreators always includes the dead since
+-- the artifact survives them).
+--
+-- Categories with more entries than the cap surface totals separately so
+-- the caller can ask for follow-ups via list_historical_figures (future).
+function living_legends(...)
+    local include_dead = (select(1, ...) == "include_dead")
+    local HERO_CAP = 30
+    local NECRO_CAP = 30
+    local CREATOR_CAP = 20
+    local CREATOR_SAMPLES = 5
+    local HERO_THRESHOLD = 10
+
+    local current_year = df.global.cur_year
+
+    local function ref(target_hf_id)
+        if not target_hf_id or target_hf_id == -1 then return nil end
+        local h = df.historical_figure.find(target_hf_id)
+        if not h then return { id = target_hf_id } end
+        return {
+            id = target_hf_id,
+            firstName = df_string(h.name.first_name),
+            displayName = name_string(h.name, false),
+            englishName = name_string(h.name, true),
+            alive = h.died_year == -1,
+        }
+    end
+
+    -- Pre-aggregate artifact-maker counts (and sample artifact names).
+    local artifact_counts = {}
+    local artifact_samples = {}
+    try(function()
+        for _, art in ipairs(df.global.world.artifacts.all) do
+            local ok_, maker = pcall(function() return art.item and art.item.maker end)
+            if ok_ and maker and maker ~= -1 then
+                artifact_counts[maker] = (artifact_counts[maker] or 0) + 1
+                local samples = artifact_samples[maker]
+                if not samples then samples = {}; artifact_samples[maker] = samples end
+                if #samples < CREATOR_SAMPLES then
+                    table.insert(samples, {
+                        artifactId = try(function() return art.id end),
+                        name = try(function() return name_string(art.name) end),
+                    })
+                end
+            end
+        end
+    end)
+
+    -- Civ leaders: walk Civilization entities, find LAW_MAKING position
+    -- holders. Captures cross-civ rulers, not just the player's parent civ.
+    local civ_leaders = {}
+    local civ_type = try(function() return df.historical_entity_type.Civilization end)
+    try(function()
+        for _, ent in ipairs(df.global.world.entities.all) do
+            if (civ_type == nil or ent.type == civ_type) and ent.positions then
+                local positions_by_id = {}
+                for _, pos in ipairs(ent.positions.own or {}) do
+                    positions_by_id[pos.id] = pos
+                end
+                for _, asn in ipairs(ent.positions.assignments or {}) do
+                    local pos = positions_by_id[asn.position_id]
+                    local hfid = asn.histfig
+                    if pos and hfid and hfid ~= -1 then
+                        local is_leader = try(function()
+                            return pos.responsibilities and pos.responsibilities.LAW_MAKING
+                        end)
+                        if is_leader then
+                            local r = ref(hfid)
+                            if r and (include_dead or r.alive) then
+                                r.entityId = ent.id
+                                r.entityName = try(function() return name_string(ent.name) end)
+                                r.positionCode = try(function() return pos.code end)
+                                r.positionName = try(function()
+                                    return pos.name and pos.name[0] and df_string(pos.name[0])
+                                end)
+                                table.insert(civ_leaders, r)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- Iterate all historical figures classifying threats/necromancers/heroes.
+    local megabeasts, semimegabeasts, forgotten_beasts = {}, {}, {}
+    local night_creatures, demons, titans = {}, {}, {}
+    local necromancers, cursed = {}, {}
+    local heroes = {}
+
+    local function whereabouts(hf)
+        return try(function()
+            local w = hf.info and hf.info.whereabouts
+            if not w then return nil end
+            local enum = df.whereabouts_type or df.unit_whereabouts_state
+            return {
+                state = enum_name(enum, tonumber(w.state)),
+                siteId = w.site_id,
+                regionId = w.region_id,
+            }
+        end)
+    end
+
+    local function build(hf, kill_count, extras)
+        local e = {
+            id = hf.id,
+            firstName = df_string(hf.name.first_name),
+            displayName = name_string(hf.name, false),
+            englishName = name_string(hf.name, true),
+            race = try(function() return hf.race end),
+            birthYear = try(function() return hf.born_year end),
+            deathYear = try(function()
+                return hf.died_year ~= -1 and hf.died_year or nil
+            end),
+            alive = hf.died_year == -1,
+            killCount = (kill_count and kill_count > 0) and kill_count or nil,
+            whereabouts = whereabouts(hf),
+        }
+        if extras then
+            for k, v in pairs(extras) do e[k] = v end
+        end
+        return e
+    end
+
+    try(function()
+        for _, hf in ipairs(df.global.world.history.figures) do
+            local alive = hf.died_year == -1
+            local is_deity = try(function() return hf.flags.deity end) or false
+            local is_force = try(function() return hf.flags.force end) or false
+            if not is_deity and not is_force and (include_dead or alive) then
+                local raw = nil
+                pcall(function() raw = df.creature_raw.find(hf.race) end)
+                local function rf(name)
+                    if not raw or not raw.flags then return false end
+                    local v = nil
+                    pcall(function() v = raw.flags[name] end)
+                    return v == true
+                end
+
+                local kill_count = 0
+                pcall(function()
+                    if hf.info and hf.info.kills and hf.info.kills.events then
+                        kill_count = #hf.info.kills.events
+                    end
+                end)
+
+                local is_megabeast = rf("MEGABEAST")
+                local is_semi = rf("SEMIMEGABEAST")
+                local is_fb = rf("FEATURE_BEAST")
+
+                if is_megabeast then
+                    table.insert(megabeasts, build(hf, kill_count))
+                end
+                if is_semi then
+                    table.insert(semimegabeasts, build(hf, kill_count))
+                end
+                if is_fb then
+                    table.insert(forgotten_beasts, build(hf, kill_count))
+                end
+                if rf("NIGHT_CREATURE_HUNTER") or rf("NIGHT_CREATURE_NIGHTMARE")
+                    or rf("NIGHT_CREATURE_BOGEYMAN") or rf("NIGHT_CREATURE_EXPERIMENT")
+                    or rf("NIGHT_CREATURE_ANY") then
+                    table.insert(night_creatures, build(hf, kill_count))
+                end
+                if rf("UNIQUE_DEMON") then
+                    table.insert(demons, build(hf, kill_count))
+                end
+                if rf("TITAN") then
+                    table.insert(titans, build(hf, kill_count))
+                end
+
+                local has_secret = try(function()
+                    return hf.info and hf.info.secret ~= nil
+                end)
+                if has_secret then
+                    table.insert(necromancers, build(hf, kill_count))
+                end
+
+                local curse_year = try(function() return hf.curse_year end)
+                if curse_year and curse_year ~= -1 then
+                    table.insert(cursed, build(hf, kill_count, { curseYear = curse_year }))
+                end
+
+                -- Heroes: high kill count, alive, not classified as a beast.
+                if alive and kill_count >= HERO_THRESHOLD
+                    and not is_megabeast and not is_semi and not is_fb then
+                    table.insert(heroes, build(hf, kill_count))
+                end
+            end
+        end
+    end)
+
+    -- Sort + cap heroes by kill count.
+    table.sort(heroes, function(a, b)
+        return (a.killCount or 0) > (b.killCount or 0)
+    end)
+    local heroes_total = #heroes
+    if #heroes > HERO_CAP then
+        local trimmed = {}
+        for i = 1, HERO_CAP do trimmed[i] = heroes[i] end
+        heroes = trimmed
+    end
+
+    -- Sort + cap necromancers (by alive first, then by kill count desc).
+    table.sort(necromancers, function(a, b)
+        if a.alive ~= b.alive then return a.alive end
+        return (a.killCount or 0) > (b.killCount or 0)
+    end)
+    local necromancers_total = #necromancers
+    if #necromancers > NECRO_CAP then
+        local trimmed = {}
+        for i = 1, NECRO_CAP do trimmed[i] = necromancers[i] end
+        necromancers = trimmed
+    end
+
+    -- Top-N artifact creators.
+    local creators_list = {}
+    for hfid, count in pairs(artifact_counts) do
+        table.insert(creators_list, { hfid = hfid, count = count })
+    end
+    table.sort(creators_list, function(a, b) return a.count > b.count end)
+    local artifact_creators = {}
+    for i = 1, math.min(CREATOR_CAP, #creators_list) do
+        local item = creators_list[i]
+        local hf = df.historical_figure.find(item.hfid)
+        if hf then
+            local e = build(hf, nil, {
+                artifactCount = item.count,
+                artifactSamples = artifact_samples[item.hfid],
+            })
+            table.insert(artifact_creators, e)
+        end
+    end
+
+    return ok({
+        asOfYear = current_year,
+        includeDead = include_dead,
+        civLeaders = civ_leaders,
+        artifactCreators = artifact_creators,
+        megabeasts = megabeasts,
+        semimegabeasts = semimegabeasts,
+        forgottenBeasts = forgotten_beasts,
+        nightCreatures = night_creatures,
+        demons = demons,
+        titans = titans,
+        necromancers = necromancers,
+        cursedFigures = cursed,
+        heroes = heroes,
+        totals = {
+            civLeaders = #civ_leaders,
+            artifactCreatorsUnique = #creators_list,
+            megabeasts = #megabeasts,
+            semimegabeasts = #semimegabeasts,
+            forgottenBeasts = #forgotten_beasts,
+            nightCreatures = #night_creatures,
+            demons = #demons,
+            titans = #titans,
+            necromancers = necromancers_total,
+            cursedFigures = #cursed,
+            heroes = heroes_total,
+        },
     })
 end
 

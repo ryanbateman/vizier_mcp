@@ -13,7 +13,7 @@ import { callRpc, DFHackRPCError } from "./client.js";
 import { CR_NOT_FOUND, CR_FAILURE, CR_WRONG_USAGE } from "./codec.js";
 
 export const LEGENDS_MODULE = "rpc.legends";
-export const LEGENDS_SCHEMA = 5;
+export const LEGENDS_SCHEMA = 6;
 
 interface StringListMessage {
   value?: string[];
