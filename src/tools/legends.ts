@@ -79,6 +79,47 @@ async function enrichBiography(bio: unknown): Promise<void> {
   }
 }
 
+/**
+ * Resolve `race` ids to `raceName` across every category entry returned
+ * by living_legends. Mutates in place; silent on any malformed input.
+ */
+async function enrichLivingLegends(payload: unknown): Promise<void> {
+  if (!payload || typeof payload !== "object") return;
+  try {
+    const lookups = await ensureLookups();
+    if (!lookups.creature) return;
+    const creature = lookups.creature;
+    const root = payload as Record<string, unknown>;
+    const categories = [
+      "civLeaders",
+      "artifactCreators",
+      "megabeasts",
+      "semimegabeasts",
+      "forgottenBeasts",
+      "nightCreatures",
+      "demons",
+      "titans",
+      "necromancers",
+      "cursedFigures",
+      "heroes",
+    ];
+    for (const cat of categories) {
+      const list = root[cat];
+      if (!Array.isArray(list)) continue;
+      for (const raw of list) {
+        const entry = raw as Record<string, unknown>;
+        const race = entry.race;
+        if (typeof race === "number") {
+          const name = creature.get(race);
+          if (name) entry.raceName = name;
+        }
+      }
+    }
+  } catch {
+    // best-effort enrichment; bare race ids remain in the response
+  }
+}
+
 const INSTALL_INSTRUCTIONS = [
   "The legends tools rely on a tiny Lua companion script that lives inside",
   "DFHack — Vizier MCP cannot reach the legends data otherwise (see",
@@ -281,6 +322,48 @@ export function registerLegendsTools(server: McpServer) {
         const bio = await callLegends<unknown>("get_biography", [String(hfid)]);
         await enrichBiography(bio);
         return jsonResult(bio);
+      } catch (err) {
+        return missingOrError(err);
+      }
+    },
+  );
+
+  server.tool(
+    "living_legends",
+    "World-scale digest of prominent historical figures, classified by " +
+      "why they matter. Categories: civLeaders (LAW_MAKING position " +
+      "holders across all civilisations), artifactCreators (top-20 by " +
+      "count, with sample artifact names — dead or alive), megabeasts / " +
+      "semimegabeasts / forgottenBeasts / nightCreatures / demons / " +
+      "titans (alive, by race flag), necromancers (alive, hf.info.secret " +
+      "set, capped 30), cursedFigures (vampires/werebeasts, curse_year " +
+      "set), heroes (alive, >=10 worldgen kills, capped 30 by kill " +
+      "count). Each entry carries histfigId + names + race + birth/death " +
+      "years + alive flag + category extras (positionCode, " +
+      "artifactCount/Samples, killCount, whereabouts) — pivot to " +
+      "dwarf_biography with the histfigId for the deep read. Per-category " +
+      "totals are surfaced separately when entries were capped. Beasts/ " +
+      "leaders/necromancers default to alive-only; pass " +
+      "include_dead=true to include deceased. " +
+      RUN_LUA_NOTE,
+    {
+      include_dead: z
+        .boolean()
+        .optional()
+        .describe(
+          "Include deceased figures in beasts/leaders/necromancers/heroes/" +
+            "cursed categories. Artifact creators always include the dead " +
+            "(the artifact's fame outlives the maker). Default: false.",
+        ),
+    },
+    async ({ include_dead }) => {
+      try {
+        const data = await callLegends<unknown>(
+          "living_legends",
+          include_dead ? ["include_dead"] : [],
+        );
+        await enrichLivingLegends(data);
+        return jsonResult(data);
       } catch (err) {
         return missingOrError(err);
       }
