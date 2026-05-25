@@ -257,8 +257,18 @@ export function registerLegendsTools(server: McpServer) {
         .describe(
           "Historical figure id (looked up directly, no translation needed).",
         ),
+      resolve: z
+        .boolean()
+        .optional()
+        .describe(
+          "When true, world-data refs (site/entity/artifact/region/" +
+            "position) carry inline names. When false (default), refs " +
+            "come back bare as { kind, id } — call describe_site / " +
+            "describe_entity / describe_artifact for the follow-up. " +
+            "Pay the up-front cost only when narrating in detail.",
+        ),
     },
-    async ({ name, unit_id, histfig_id }) => {
+    async ({ name, unit_id, histfig_id, resolve }) => {
       try {
         let hfid: number | undefined = histfig_id;
 
@@ -319,7 +329,10 @@ export function registerLegendsTools(server: McpServer) {
           );
         }
 
-        const bio = await callLegends<unknown>("get_biography", [String(hfid)]);
+        const bio = await callLegends<unknown>("get_biography", [
+          String(hfid),
+          resolve ? "resolve" : "",
+        ]);
         await enrichBiography(bio);
         return jsonResult(bio);
       } catch (err) {
@@ -397,6 +410,74 @@ export function registerLegendsTools(server: McpServer) {
       try {
         const data = await callLegends<unknown>("list_noble_positions", [
           scope ?? "fort_and_civ",
+        ]);
+        return jsonResult(data);
+      } catch (err) {
+        return missingOrError(err);
+      }
+    },
+  );
+
+  server.tool(
+    "describe_site",
+    "Resolve a world-site id to its name, type (city / dark fortress / " +
+      "forest retreat / cave / tomb / hillocks / ...) and current owning " +
+      "entity. Pivot from any { kind:'site', id } ref returned by " +
+      "dwarf_biography (whereabouts.site, careerHighlights.refs.site) " +
+      "or living_legends. " +
+      RUN_LUA_NOTE,
+    {
+      id: z.number().int().describe("World-site id."),
+    },
+    async ({ id }) => {
+      try {
+        const data = await callLegends<unknown>("describe_site", [String(id)]);
+        return jsonResult(data);
+      } catch (err) {
+        return missingOrError(err);
+      }
+    },
+  );
+
+  server.tool(
+    "describe_entity",
+    "Resolve an entity id to its name, type (Civilization / " +
+      "SiteGovernment / Religion / Guild / ...), race, and current " +
+      "LAW_MAKING position holders (the leaders). Pivot from any " +
+      "{ kind:'entity', id } ref returned by dwarf_biography " +
+      "(origins.originCiv, careerHighlights.refs.entity) or " +
+      "living_legends civLeaders. " +
+      RUN_LUA_NOTE,
+    {
+      id: z.number().int().describe("Historical-entity id."),
+    },
+    async ({ id }) => {
+      try {
+        const data = await callLegends<unknown>("describe_entity", [
+          String(id),
+        ]);
+        return jsonResult(data);
+      } catch (err) {
+        return missingOrError(err);
+      }
+    },
+  );
+
+  server.tool(
+    "describe_artifact",
+    "Resolve an artifact id to its name, item type (slab / weapon / " +
+      "instrument / ...), and maker (as a histfig ref). Pivot from " +
+      "any { kind:'artifact', id } ref returned by dwarf_biography " +
+      "(careerHighlights.refs.artifact, craftedOutput[].artifactId) " +
+      "or living_legends artifactCreators. " +
+      RUN_LUA_NOTE,
+    {
+      id: z.number().int().describe("Artifact id."),
+    },
+    async ({ id }) => {
+      try {
+        const data = await callLegends<unknown>("describe_artifact", [
+          String(id),
         ]);
         return jsonResult(data);
       } catch (err) {
