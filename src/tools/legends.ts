@@ -11,6 +11,30 @@ import {
 import { ensureLookups } from "../lookup-cache.js";
 
 /**
+ * Recursively walk a value applying sex -> sexName on every object that
+ * carries a numeric `sex` field. Hf refs appear in many places in the
+ * bio (social.*, origins.parents, careerHighlights[].other, ...) and a
+ * missing sexName on any of them is a misread risk for the narrator
+ * (a "Bosa" child read as female when male, etc.). One pass closes
+ * the whole class.
+ */
+function applySexNames(value: unknown): void {
+  if (value == null) return;
+  if (Array.isArray(value)) {
+    for (const v of value) applySexNames(v);
+    return;
+  }
+  if (typeof value !== "object") return;
+  const obj = value as Record<string, unknown>;
+  const sex = obj.sex;
+  if (typeof sex === "number" && obj.sexName === undefined) {
+    if (sex === 0) obj.sexName = "Female";
+    else if (sex === 1) obj.sexName = "Male";
+  }
+  for (const v of Object.values(obj)) applySexNames(v);
+}
+
+/**
  * Resolve bare integer ids in identity (race, currentProfession) and
  * preferences (creatureId, matType+matIndex, itemType+itemSubtype) to
  * names via the existing TS-side lookup cache. Mutates in place;
@@ -32,10 +56,8 @@ async function enrichBiography(bio: unknown): Promise<void> {
         const def = lookups.profession.get(prof);
         if (def) identity.currentProfessionName = def.caption;
       }
-      const sex = identity.sex;
-      if (sex === 0) identity.sexName = "Female";
-      else if (sex === 1) identity.sexName = "Male";
     }
+    applySexNames(bio);
     const inner = (bio as { innerLife?: { preferences?: unknown } }).innerLife;
     const prefs = inner?.preferences;
     if (Array.isArray(prefs)) {
@@ -60,10 +82,12 @@ async function enrichBiography(bio: unknown): Promise<void> {
         }
       }
     }
-    // backstory.kills.killedRaceCounts: { "<raceId>": count } -> resolve
-    // race ids alongside as a parallel { "<raceName>": count } map.
-    const backstory = (bio as { backstory?: { kills?: { killedRaceCounts?: unknown } } }).backstory;
-    const counts = backstory?.kills?.killedRaceCounts;
+    // backstory.kills.byRaceTally: { "<raceId>": count } -> resolve race
+    // ids alongside as a parallel { "<raceName>": count } map. Note this
+    // is the wildlife-leaning counter, not the historic-figure-slaying
+    // counter — see byRaceTallyLength vs historicEvents on the Lua side.
+    const backstory = (bio as { backstory?: { kills?: { byRaceTally?: unknown } } }).backstory;
+    const counts = backstory?.kills?.byRaceTally;
     if (counts && typeof counts === "object" && lookups.creature) {
       const named: Record<string, number> = {};
       for (const [rid, count] of Object.entries(counts)) {
@@ -71,7 +95,7 @@ async function enrichBiography(bio: unknown): Promise<void> {
         if (n && typeof count === "number") named[n] = count;
       }
       if (Object.keys(named).length > 0) {
-        (backstory!.kills as Record<string, unknown>).killedRaceNames = named;
+        (backstory!.kills as Record<string, unknown>).byRaceTallyNames = named;
       }
     }
   } catch {
@@ -115,6 +139,7 @@ async function enrichLivingLegends(payload: unknown): Promise<void> {
         }
       }
     }
+    applySexNames(payload);
   } catch {
     // best-effort enrichment; bare race ids remain in the response
   }
@@ -461,6 +486,7 @@ export function registerLegendsTools(server: McpServer) {
         const data = await callLegends<unknown>("describe_entity", [
           String(id),
         ]);
+        applySexNames(data);
         return jsonResult(data);
       } catch (err) {
         return missingOrError(err);
@@ -484,6 +510,32 @@ export function registerLegendsTools(server: McpServer) {
         const data = await callLegends<unknown>("describe_artifact", [
           String(id),
         ]);
+        applySexNames(data);
+        return jsonResult(data);
+      } catch (err) {
+        return missingOrError(err);
+      }
+    },
+  );
+
+  server.tool(
+    "describe_written_content",
+    "Resolve a written-content id to its title, form (poetry / prose / " +
+      "musical / dance / philosophical treatise / ...), style, and " +
+      "author (as a histfig ref). Pivot from any " +
+      "{ kind:'written_content', id } ref returned by dwarf_biography " +
+      "careerHighlights[].refs.writtenContent on a " +
+      "written_content_composedst event. " +
+      RUN_LUA_NOTE,
+    {
+      id: z.number().int().describe("Written-content id."),
+    },
+    async ({ id }) => {
+      try {
+        const data = await callLegends<unknown>("describe_written_content", [
+          String(id),
+        ]);
+        applySexNames(data);
         return jsonResult(data);
       } catch (err) {
         return missingOrError(err);
