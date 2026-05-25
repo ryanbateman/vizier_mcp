@@ -148,6 +148,65 @@ local function try(fn)
     return nil
 end
 
+-- World-data refs: every bare integer id that leaves the module is
+-- wrapped in { kind, id [, name] } so the consumer can either narrate
+-- around it ("a site I would need to look up") or call describe_<kind>
+-- for the follow-up. When `resolve` is true, the ref carries an inline
+-- `name` — pay the lookup cost up front. When false (default), the
+-- ref is bare and the caller decides what to do with it.
+--
+-- Position refs are composite: { kind="position", entityId, positionId }
+-- — position ids are entity-local, so both are needed to dereference.
+local function site_ref(id, resolve)
+    if not id or id == -1 then return nil end
+    if not resolve then return { kind = "site", id = id } end
+    local s = df.world_site.find(id)
+    if not s then return { kind = "site", id = id } end
+    return { kind = "site", id = id, name = name_string(s.name) }
+end
+
+local function entity_ref(id, resolve)
+    if not id or id == -1 then return nil end
+    if not resolve then return { kind = "entity", id = id } end
+    local e = df.historical_entity.find(id)
+    if not e then return { kind = "entity", id = id } end
+    return { kind = "entity", id = id, name = name_string(e.name) }
+end
+
+local function artifact_ref(id, resolve)
+    if not id or id == -1 then return nil end
+    if not resolve then return { kind = "artifact", id = id } end
+    local a = df.artifact_record.find(id)
+    if not a then return { kind = "artifact", id = id } end
+    return { kind = "artifact", id = id, name = name_string(a.name) }
+end
+
+local function region_ref(id, resolve)
+    if not id or id == -1 then return nil end
+    if not resolve then return { kind = "region", id = id } end
+    local r = df.world_region.find(id)
+    if not r then return { kind = "region", id = id } end
+    return { kind = "region", id = id, name = name_string(r.name) }
+end
+
+local function position_ref(entity_id, position_id, resolve)
+    if not position_id or position_id == -1 then return nil end
+    local out = { kind = "position", entityId = entity_id, positionId = position_id }
+    if not resolve or not entity_id or entity_id == -1 then return out end
+    local ent = df.historical_entity.find(entity_id)
+    if not ent or not ent.positions then return out end
+    for _, pos in ipairs(ent.positions.own or {}) do
+        if pos.id == position_id then
+            out.code = try(function() return pos.code end)
+            out.name = try(function()
+                return pos.name and pos.name[0] and df_string(pos.name[0])
+            end)
+            return out
+        end
+    end
+    return out
+end
+
 -- Note on arguments: DFHack's RunLua pushes the protobuf `arguments`
 -- repeated-string field as individual Lua varargs (NOT a single table).
 -- So functions take `...` and use `select`/`{...}` to read them.
@@ -155,7 +214,7 @@ end
 -- ping: probe whether the module is installed and callable.
 -- Returns the schema version so the client can detect mismatches.
 function ping(...)
-    return ok({ schema = 6, dfhack = dfhack.getDFHackVersion() })
+    return ok({ schema = 7, dfhack = dfhack.getDFHackVersion() })
 end
 
 -- get_overview: counts + year range for the four big legends collections.
@@ -406,6 +465,7 @@ end
 function get_biography(...)
     local id = tonumber((select(1, ...)))
     if not id then return err("missing histfig id (first arg)") end
+    local resolve = (select(2, ...) == "resolve")
     local hf = df.historical_figure.find(id)
     if not hf then return err("histfig not found: " .. tostring(id)) end
 
@@ -413,13 +473,13 @@ function get_biography(...)
     -- LegendsError with the actual message instead of a CR_FAILURE
     -- that the TS-side maps to ScriptMissingError.
     local ok_body, result_or_err = pcall(function()
-        return _build_biography(id, hf)
+        return _build_biography(id, hf, resolve)
     end)
     if ok_body then return result_or_err end
     return err("get_biography internal error: " .. tostring(result_or_err))
 end
 
-function _build_biography(id, hf)
+function _build_biography(id, hf, resolve)
     -- Locate the live unit (if any) for personality/thoughts/stress.
     local unit = nil
     for _, u in ipairs(df.global.world.units.active) do
@@ -490,7 +550,7 @@ function _build_biography(id, hf)
 
     local origins = {
         birthYear = try(function() return hf.born_year end),
-        originCivId = try(function() return hf.civ_id end),
+        originCiv = try(function() return entity_ref(hf.civ_id, resolve) end),
         parents = try(function()
             return links_of_type({
                 "histfig_hf_link_motherst",
@@ -626,13 +686,47 @@ function _build_biography(id, hf)
     --
     -- Defensive: DFHack's Lua bindings raise on accessing a field that
     -- doesn't exist on the concrete subclass, so every probe is pcall'd.
+    -- Field-name variants for the focal histfig across event subclasses.
+    -- DF death events use `victim_hf`/`slayer_hf`; older snippets used
+    -- bare `victim`. We probe both so neither hides the participant.
     local function paired_field(role)
-        if role == "slayer_hf" then return "victim", "victim" end
+        if role == "slayer_hf" then return "victim_hf", "victim" end
+        if role == "victim_hf" then return "slayer_hf", "slayer" end
         if role == "victim" then return "slayer_hf", "slayer" end
         if role == "actor" then return "target_hf", "target" end
         if role == "target_hf" then return "actor", "actor" end
         if role == "targeted_histfig" then return "actor", "actor" end
         return nil, nil
+    end
+
+    -- Generic per-event world-data ref probe. For each event we look
+    -- at a handful of well-known fields (artifact, site, region,
+    -- entity, position) and emit refs the consumer can either narrate
+    -- around or follow up on via describe_<kind>.
+    --
+    -- Position is composite — it needs an entity context — so we pick
+    -- up the entity ref first and feed it into position_ref.
+    local function event_refs(ev)
+        local function field(name)
+            local ok_, v = pcall(function() return ev[name] end)
+            if ok_ and v and v ~= -1 then return v end
+            return nil
+        end
+
+        local refs = {}
+        local art = field("artifact_id") or field("artifact")
+        if art then refs.artifact = artifact_ref(art, resolve) end
+        local site = field("site_id") or field("site")
+        if site then refs.site = site_ref(site, resolve) end
+        local region = field("subregion") or field("region_id") or field("region")
+        if region then refs.region = region_ref(region, resolve) end
+        local ent = field("entity") or field("civ") or field("entity_id")
+        if ent then refs.entity = entity_ref(ent, resolve) end
+        local pos = field("position") or field("position_id")
+        if pos then refs.position = position_ref(ent, pos, resolve) end
+
+        if next(refs) == nil then return nil end
+        return refs
     end
 
     local career_highlights = try(function()
@@ -642,8 +736,8 @@ function _build_biography(id, hf)
         for _, ev in ipairs(events) do
             local role = nil
             for _, field in ipairs({ "histfig", "histfig_id", "actor",
-                                     "slayer_hf", "victim", "targeted_histfig",
-                                     "target_hf" }) do
+                                     "slayer_hf", "victim_hf", "victim",
+                                     "targeted_histfig", "target_hf" }) do
                 local ok_, v = pcall(function() return ev[field] end)
                 if ok_ and v and v == id then role = field; break end
             end
@@ -665,6 +759,7 @@ function _build_biography(id, hf)
                             entry.other = ref(other_id)
                         end
                     end
+                    entry.refs = event_refs(ev)
                     table.insert(out, entry)
                 end
             end
@@ -728,8 +823,8 @@ function _build_biography(id, hf)
                     return enum_name(enum, tonumber(w.state)) or tostring(w.state)
                 end),
                 stateCode = try(function() return tonumber(w.state) end),
-                regionId = try(function() return w.region_id end),
-                siteId = try(function() return w.site_id end),
+                region = try(function() return region_ref(w.region_id, resolve) end),
+                site = try(function() return site_ref(w.site_id, resolve) end),
                 armyId = try(function() return w.army_id end),
             }
         end)
@@ -779,6 +874,125 @@ function _build_biography(id, hf)
         craftedOutput = crafted_output,
         backstory = backstory,
         linkErrors = link_errors_list,
+    })
+end
+
+-- describe_site: resolve a site id to its name + type + owning entity.
+-- Pivot target from any { kind="site", id } ref returned by bio or
+-- living_legends. Args: { siteId }.
+function describe_site(...)
+    local id = tonumber(select(1, ...))
+    if not id then return err("missing site id (first arg)") end
+    local s = df.world_site.find(id)
+    if not s then return err("site not found: " .. tostring(id)) end
+
+    return ok({
+        id = s.id,
+        name = try(function() return name_string(s.name) end),
+        type = try(function()
+            local enum = df.world_site_type or (df.world_site and df.world_site.T_type)
+            return enum_name(enum, tonumber(s.type)) or tostring(s.type)
+        end),
+        typeCode = try(function() return tonumber(s.type) end),
+        civId = try(function() return s.civ_id end),
+        ownerCiv = try(function() return entity_ref(s.cur_owner_id, true) end),
+        pos = try(function() return { x = s.pos.x, y = s.pos.y } end),
+    })
+end
+
+-- describe_entity: resolve an entity id to its name, type (Civilization /
+-- SiteGovernment / Religion / ...), race, and LAW_MAKING position
+-- holders (the leaders). Args: { entityId }.
+function describe_entity(...)
+    local id = tonumber(select(1, ...))
+    if not id then return err("missing entity id (first arg)") end
+    local e = df.historical_entity.find(id)
+    if not e then return err("entity not found: " .. tostring(id)) end
+
+    local leaders = try(function()
+        local out = {}
+        if not e.positions then return out end
+        local positions_by_id = {}
+        for _, pos in ipairs(e.positions.own or {}) do
+            positions_by_id[pos.id] = pos
+        end
+        for _, asn in ipairs(e.positions.assignments or {}) do
+            local pos = positions_by_id[asn.position_id]
+            if pos and asn.histfig and asn.histfig ~= -1 then
+                local is_leader = try(function()
+                    return pos.responsibilities and pos.responsibilities.LAW_MAKING
+                end)
+                if is_leader then
+                    local h = df.historical_figure.find(asn.histfig)
+                    if h then
+                        table.insert(out, {
+                            positionCode = try(function() return pos.code end),
+                            positionName = try(function()
+                                return pos.name and pos.name[0] and df_string(pos.name[0])
+                            end),
+                            holder = {
+                                id = asn.histfig,
+                                firstName = df_string(h.name.first_name),
+                                displayName = name_string(h.name, false),
+                                englishName = name_string(h.name, true),
+                                alive = h.died_year == -1,
+                            },
+                        })
+                    end
+                end
+            end
+        end
+        return out
+    end) or {}
+
+    return ok({
+        id = e.id,
+        name = try(function() return name_string(e.name) end),
+        type = try(function()
+            return enum_name(df.historical_entity_type, tonumber(e.type))
+                or tostring(e.type)
+        end),
+        typeCode = try(function() return tonumber(e.type) end),
+        race = try(function() return e.race end),
+        leaders = leaders,
+    })
+end
+
+-- describe_artifact: resolve an artifact id to its name + item type +
+-- maker (as a histfig ref). The item itself carries more (material,
+-- quality, decorations) but those require a separate item walk — kept
+-- minimal here. Args: { artifactId }.
+function describe_artifact(...)
+    local id = tonumber(select(1, ...))
+    if not id then return err("missing artifact id (first arg)") end
+    local a = df.artifact_record.find(id)
+    if not a then return err("artifact not found: " .. tostring(id)) end
+
+    -- Local ref helper (re-used pattern; cheap enough not to refactor).
+    local function hf_ref(hfid)
+        if not hfid or hfid == -1 then return nil end
+        local h = df.historical_figure.find(hfid)
+        if not h then return { id = hfid } end
+        return {
+            id = hfid,
+            firstName = df_string(h.name.first_name),
+            displayName = name_string(h.name, false),
+            englishName = name_string(h.name, true),
+            alive = h.died_year == -1,
+        }
+    end
+
+    return ok({
+        id = a.id,
+        name = try(function() return name_string(a.name) end),
+        item = try(function()
+            if not a.item then return nil end
+            return {
+                id = try(function() return a.item.id end),
+                type = try(function() return type_name(a.item._type) end),
+                maker = try(function() return hf_ref(a.item.maker) end),
+            }
+        end),
     })
 end
 
