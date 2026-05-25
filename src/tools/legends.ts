@@ -234,7 +234,12 @@ export function registerLegendsTools(server: McpServer) {
       "they crafted. Accept name (substring, case-insensitive), unit_id " +
       "(active fortress unit), or histfig_id (any historical figure in " +
       "the world). Name matching surfaces multiple hits if ambiguous — " +
-      "use one of the ids from that list to disambiguate." +
+      "use one of the ids from that list to disambiguate. " +
+      "World-data refs (whereabouts.site, origins.originCiv, " +
+      "careerHighlights[].refs.{artifact,site,region,entity,position}) " +
+      "come back bare as { kind, id } by default — pass resolve=true to " +
+      "get inline names, or pivot via describe_site / describe_entity / " +
+      "describe_artifact for follow-up." +
       STRUCTURED_NAME_NOTE +
       " " +
       RUN_LUA_NOTE,
