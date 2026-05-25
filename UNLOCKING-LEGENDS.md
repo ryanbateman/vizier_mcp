@@ -189,9 +189,28 @@ structured `status: "missing"` payload pointing at
 
 ### Install
 
-1. Copy `lua/rpc/legends.lua` to `<DF install>/hack/lua/rpc/legends.lua`.
-2. Set `VIZIER_ENABLE_RUN_LUA=1` in the environment running `vizier-mcp`.
-3. Restart `vizier-mcp` and call `legends_setup_check` to confirm.
+The easiest install is via the bundled CLI shipped with the npm
+package:
+
+```bash
+npx @ryanbateman/vizier-mcp install-companion
+```
+
+This auto-detects a Steam DFHack install on Linux / macOS / Windows
+and copies `legends.lua` into `<dfhack>/hack/lua/rpc/legends.lua`.
+For non-Steam installs pass `--dfhack=<path>` explicitly. See
+`--help` for the full option list.
+
+If you'd rather install by hand (or you're not using npm):
+
+1. Download `legends.lua` from the latest GitHub Release
+   (https://github.com/ryanbateman/vizier_mcp/releases) — or copy
+   it from `lua/rpc/legends.lua` if you've cloned the repo.
+2. Place it at `<dfhack root>/hack/lua/rpc/legends.lua`. On a Steam
+   DFHack install the root is the separate `steamapps/common/DFHack/`
+   directory; on a manual install it's inside the DF install directory.
+3. Set `VIZIER_ENABLE_RUN_LUA=1` in the environment running `vizier-mcp`.
+4. Restart `vizier-mcp` and call `legends_setup_check` to confirm.
 
 ### Extending
 

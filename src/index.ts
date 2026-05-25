@@ -1,4 +1,16 @@
 #!/usr/bin/env node
+// Subcommand dispatch (must run before any DFHack-touching imports so
+// `npx vizier-mcp install-companion` works on a host with no DF / DFHack
+// running). The install-companion path is intentionally read-only relative
+// to the MCP server — it copies the bundled rpc.legends Lua module into
+// a DFHack install and exits.
+const SUBCOMMAND = process.argv[2];
+if (SUBCOMMAND === "install-companion") {
+  const { run } = await import("./install-companion.js");
+  await run(process.argv.slice(3));
+  process.exit(0);
+}
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { readFileSync } from "fs";

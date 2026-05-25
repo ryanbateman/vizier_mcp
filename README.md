@@ -123,6 +123,26 @@ npm ci && npm run build
 node build/index.js
 ```
 
+### Optional: Legends companion
+
+The legends tool family (`dwarf_biography`, `living_legends`, `describe_site` / `_entity` / `_artifact` / `_written_content`, `list_fortress_nobles`, `get_legends_overview`, `legends_setup_check`, `describe_historical_figure`) requires a small DFHack-side Lua module to be copied into your DFHack install. **The rest of Vizier works without it** — if you're not interested in legends/historical-figure queries, skip this step.
+
+Install via the bundled CLI:
+
+```bash
+npx @ryanbateman/vizier-mcp install-companion
+```
+
+This auto-detects a Steam DFHack install on Linux / macOS / Windows. For non-Steam installs (or unusual layouts) pass the path explicitly:
+
+```bash
+npx @ryanbateman/vizier-mcp install-companion --dfhack=/path/to/dfhack
+```
+
+The CLI also accepts `--dry-run` to preview, `--force` to overwrite an existing copy, and `--help` for the full option list. After installing, restart DFHack so the module loads, then call `legends_setup_check` from your MCP client to confirm.
+
+You also need `VIZIER_ENABLE_RUN_LUA=1` in the MCP server's environment — add it to the `env` block in your client config above. See [UNLOCKING-LEGENDS.md](UNLOCKING-LEGENDS.md) for the manual install path (used by non-npm consumers).
+
 ## Tool Reference
 
 Tools fall into two groups. **Base tools** wrap a single DFHack RPC (Core API or RFR) and return its data with names resolved server-side — the primitives. **Composite narrative tools** compose those primitives, apply projection and aggregation, and answer a specific [Uses](#uses) question in one call. Reach for a composite tool when a question is in the Uses list; reach for the base tools when you need to drill in.
