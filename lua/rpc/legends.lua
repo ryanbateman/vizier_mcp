@@ -189,6 +189,37 @@ local function region_ref(id, resolve)
     return { kind = "region", id = id, name = name_string(r.name) }
 end
 
+local function written_content_ref(id, resolve)
+    if not id or id == -1 then return nil end
+    if not resolve then return { kind = "written_content", id = id } end
+    local wc = df.written_content.find(id)
+    if not wc then return { kind = "written_content", id = id } end
+    return {
+        kind = "written_content",
+        id = id,
+        title = try(function() return df_string(wc.title) end),
+    }
+end
+
+-- Histfig ref shape used everywhere a person is referenced from another
+-- person's record (relationships, slayer/victim, position holders,
+-- artifact makers, search hits). Always carries sex so the TS layer can
+-- name it cleanly — previously sex was identity-only and downstream
+-- readers misgendered children/spouses/etc. that only appeared via refs.
+local function hf_ref(target_hf_id)
+    if not target_hf_id or target_hf_id == -1 then return nil end
+    local h = df.historical_figure.find(target_hf_id)
+    if not h then return { id = target_hf_id } end
+    return {
+        id = target_hf_id,
+        firstName = df_string(h.name.first_name),
+        displayName = name_string(h.name, false),
+        englishName = name_string(h.name, true),
+        alive = h.died_year == -1,
+        sex = try(function() return h.sex end),
+    }
+end
+
 local function position_ref(entity_id, position_id, resolve)
     if not position_id or position_id == -1 then return nil end
     local out = { kind = "position", entityId = entity_id, positionId = position_id }
@@ -214,7 +245,7 @@ end
 -- ping: probe whether the module is installed and callable.
 -- Returns the schema version so the client can detect mismatches.
 function ping(...)
-    return ok({ schema = 7, dfhack = dfhack.getDFHackVersion() })
+    return ok({ schema = 8, dfhack = dfhack.getDFHackVersion() })
 end
 
 -- get_overview: counts + year range for the four big legends collections.
@@ -353,6 +384,7 @@ function find_histfig_by_name(...)
                 displayName = native,
                 englishName = english,
                 race = hf.race,
+                sex = try(function() return hf.sex end),
                 birthYear = hf.born_year,
                 deathYear = hf.died_year ~= -1 and hf.died_year or nil,
             })
@@ -377,21 +409,6 @@ end
 -- can see what's currently unfilled.
 function list_noble_positions(...)
     local scope = tostring(select(1, ...) or "fort_and_civ")
-
-    -- Local ref helper: same shape as the one inside get_biography.
-    -- Inlined here to avoid restructuring; cheap.
-    local function ref(target_hf_id)
-        if not target_hf_id or target_hf_id == -1 then return nil end
-        local h = df.historical_figure.find(target_hf_id)
-        if not h then return { id = target_hf_id } end
-        return {
-            id = target_hf_id,
-            firstName = df_string(h.name.first_name),
-            displayName = name_string(h.name, false),
-            englishName = name_string(h.name, true),
-            alive = h.died_year == -1,
-        }
-    end
 
     local entity_ids = {}
     local seen = {}
@@ -439,7 +456,7 @@ function list_noble_positions(...)
                         end),
                     }
                     if hfid and hfid ~= -1 then
-                        entry.holder = ref(hfid)
+                        entry.holder = hf_ref(hfid)
                         entry.vacant = false
                     else
                         entry.vacant = true
@@ -486,20 +503,6 @@ function _build_biography(id, hf, resolve)
         if u.hist_figure_id == id then unit = u; break end
     end
 
-    -- Helper to look up a histfig by id and return a thin reference.
-    local function ref(target_hf_id)
-        if not target_hf_id or target_hf_id == -1 then return nil end
-        local h = df.historical_figure.find(target_hf_id)
-        if not h then return { id = target_hf_id } end
-        return {
-            id = target_hf_id,
-            firstName = df_string(h.name.first_name),
-            displayName = name_string(h.name, false),
-            englishName = name_string(h.name, true),
-            alive = h.died_year == -1,
-        }
-    end
-
     -- Per-call diagnostic: which link categories hit a pcall error
     -- while iterating. Lets the consumer distinguish a real empty list
     -- (e.g. migrant with no parents recorded) from a silently-eaten
@@ -515,7 +518,7 @@ function _build_biography(id, hf, resolve)
                     local tn = type_name(link._type)
                     for _, want in ipairs(types) do
                         if tn == want then
-                            local r = ref(link.target_hf)
+                            local r = hf_ref(link.target_hf)
                             if r then table.insert(out, r) end
                             break
                         end
@@ -724,6 +727,8 @@ function _build_biography(id, hf, resolve)
         if ent then refs.entity = entity_ref(ent, resolve) end
         local pos = field("position") or field("position_id")
         if pos then refs.position = position_ref(ent, pos, resolve) end
+        local wc = field("wc") or field("written_content") or field("written_content_id")
+        if wc then refs.writtenContent = written_content_ref(wc, resolve) end
 
         if next(refs) == nil then return nil end
         return refs
@@ -756,7 +761,7 @@ function _build_biography(id, hf, resolve)
                         local ok_, other_id = pcall(function() return ev[other_field] end)
                         if ok_ and other_id and other_id ~= -1 then
                             entry.otherRole = other_label
-                            entry.other = ref(other_id)
+                            entry.other = hf_ref(other_id)
                         end
                     end
                     entry.refs = event_refs(ev)
@@ -781,17 +786,29 @@ function _build_biography(id, hf, resolve)
         out.kills = try(function()
             local k = hf.info.kills
             if not k then return nil end
+            -- hf.info.kills holds two parallel-ish counters that DO NOT
+            -- measure the same thing:
+            --   events       — historical-figure kill events this hf
+            --                  is recorded as slayer in (worldgen and
+            --                  later). Empirically: a goblin demon's
+            --                  slaying of a histfig DOES appear here.
+            --   killed_race  — flat vector of creature race-ids; appears
+            --                  to track only the wildlife/incidental
+            --                  side (a histfig slaying may produce a
+            --                  historicEvents++ without a killed_race
+            --                  entry). The bucketed form is published
+            --                  as `byRaceTally` so the caller cannot
+            --                  mistake the two for a single total.
             local events = k.events or {}
-            -- killed_race is a flat vector of race-ids — one entry per
-            -- kill, not a count-per-race-index. Bucket into {raceId: count}.
             local races = {}
             for _, race_id in ipairs(k.killed_race or {}) do
                 local key = tostring(tonumber(race_id) or race_id)
                 races[key] = (races[key] or 0) + 1
             end
             return {
-                eventCount = #events,
-                killedRaceCounts = next(races) and races or nil,
+                historicEvents = #events,
+                byRaceTally = next(races) and races or nil,
+                byRaceTallyLength = #(k.killed_race or {}),
             }
         end)
         out.skills = try(function()
@@ -923,20 +940,14 @@ function describe_entity(...)
                     return pos.responsibilities and pos.responsibilities.LAW_MAKING
                 end)
                 if is_leader then
-                    local h = df.historical_figure.find(asn.histfig)
-                    if h then
+                    local holder = hf_ref(asn.histfig)
+                    if holder then
                         table.insert(out, {
                             positionCode = try(function() return pos.code end),
                             positionName = try(function()
                                 return pos.name and pos.name[0] and df_string(pos.name[0])
                             end),
-                            holder = {
-                                id = asn.histfig,
-                                firstName = df_string(h.name.first_name),
-                                displayName = name_string(h.name, false),
-                                englishName = name_string(h.name, true),
-                                alive = h.died_year == -1,
-                            },
+                            holder = holder,
                         })
                     end
                 end
@@ -958,6 +969,34 @@ function describe_entity(...)
     })
 end
 
+-- describe_written_content: resolve a written-content id to its
+-- title, form, style, and author (as a histfig ref). Pivot target from
+-- any { kind="written_content", id } ref returned by bio
+-- careerHighlights on a written_content_composedst event. Args: { wcId }.
+function describe_written_content(...)
+    local id = tonumber(select(1, ...))
+    if not id then return err("missing written-content id (first arg)") end
+    local wc = df.written_content.find(id)
+    if not wc then return err("written content not found: " .. tostring(id)) end
+
+    return ok({
+        id = wc.id,
+        title = try(function() return df_string(wc.title) end),
+        author = try(function() return hf_ref(wc.author) end),
+        form = try(function()
+            return enum_name(df.written_content_type, tonumber(wc.type))
+                or tostring(wc.type)
+        end),
+        formCode = try(function() return tonumber(wc.type) end),
+        style = try(function()
+            local enum = df.written_content_style
+            return enum and enum_name(enum, tonumber(wc.style)) or tostring(wc.style)
+        end),
+        pageStart = try(function() return wc.page_start end),
+        pageEnd = try(function() return wc.page_end end),
+    })
+end
+
 -- describe_artifact: resolve an artifact id to its name + item type +
 -- maker (as a histfig ref). The item itself carries more (material,
 -- quality, decorations) but those require a separate item walk — kept
@@ -967,20 +1006,6 @@ function describe_artifact(...)
     if not id then return err("missing artifact id (first arg)") end
     local a = df.artifact_record.find(id)
     if not a then return err("artifact not found: " .. tostring(id)) end
-
-    -- Local ref helper (re-used pattern; cheap enough not to refactor).
-    local function hf_ref(hfid)
-        if not hfid or hfid == -1 then return nil end
-        local h = df.historical_figure.find(hfid)
-        if not h then return { id = hfid } end
-        return {
-            id = hfid,
-            firstName = df_string(h.name.first_name),
-            displayName = name_string(h.name, false),
-            englishName = name_string(h.name, true),
-            alive = h.died_year == -1,
-        }
-    end
 
     return ok({
         id = a.id,
@@ -1037,19 +1062,6 @@ function living_legends(...)
 
     local current_year = df.global.cur_year
 
-    local function ref(target_hf_id)
-        if not target_hf_id or target_hf_id == -1 then return nil end
-        local h = df.historical_figure.find(target_hf_id)
-        if not h then return { id = target_hf_id } end
-        return {
-            id = target_hf_id,
-            firstName = df_string(h.name.first_name),
-            displayName = name_string(h.name, false),
-            englishName = name_string(h.name, true),
-            alive = h.died_year == -1,
-        }
-    end
-
     -- Pre-aggregate artifact-maker counts (and sample artifact names).
     local artifact_counts = {}
     local artifact_samples = {}
@@ -1089,7 +1101,7 @@ function living_legends(...)
                             return pos.responsibilities and pos.responsibilities.LAW_MAKING
                         end)
                         if is_leader then
-                            local r = ref(hfid)
+                            local r = hf_ref(hfid)
                             if r and (include_dead or r.alive) then
                                 r.entityId = ent.id
                                 r.entityName = try(function() return name_string(ent.name) end)
@@ -1132,6 +1144,7 @@ function living_legends(...)
             displayName = name_string(hf.name, false),
             englishName = name_string(hf.name, true),
             race = try(function() return hf.race end),
+            sex = try(function() return hf.sex end),
             birthYear = try(function() return hf.born_year end),
             deathYear = try(function()
                 return hf.died_year ~= -1 and hf.died_year or nil
