@@ -47,13 +47,13 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
-    "protobufjs": "8.4.2",
+    "protobufjs": "8.6.4",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/node": "25.9.1",
-    "@vitest/coverage-v8": "4.1.7",
+    "@vitest/coverage-v8": "4.1.9",
     "typescript": "6.0.3",
-    "vitest": "4.1.7"
+    "vitest": "4.1.9"
   }
 }
