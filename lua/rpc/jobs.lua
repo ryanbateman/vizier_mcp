@@ -172,7 +172,7 @@ end
 -- ping: probe whether the module is installed and callable. Returns the
 -- schema version so the client can detect mismatches.
 function ping(...)
-    return ok({ schema = 1, dfhack = dfhack.getDFHackVersion() })
+    return ok({ schema = 2, dfhack = dfhack.getDFHackVersion() })
 end
 
 -- list_jobs: enumerate the fortress job queue. Skips df-internal special
@@ -229,6 +229,45 @@ function set_job_suspended(...)
     end)
     if not okm then return err("failed to set suspend: " .. tostring(e)) end
     return ok({ jobId = id, suspended = applied })
+end
+
+-- remove_job: cancel a job and remove it from the queue (dfhack.job.removeJob).
+-- Args: { jobId }. NOT reversible — the job is gone (DF may re-post a recurring
+-- workshop/labor job on its own). Wrapped in with_suspend.
+function remove_job(...)
+    local id = tonumber((select(1, ...)))
+    if not id then return err("missing job id (first arg)") end
+    local job = find_job(id)
+    if not job then return err("job not found: " .. tostring(id)) end
+
+    local removed
+    local okm, e = pcall(function()
+        dfhack.with_suspend(function() removed = dfhack.job.removeJob(job) end)
+    end)
+    if not okm then return err("failed to remove job: " .. tostring(e)) end
+    return ok({ jobId = id, removed = removed and true or false })
+end
+
+-- list_manager_orders: read the work-order queue (df.global.world.manager_orders.all)
+-- — the standing "make N of X" production orders the manager hands out as jobs.
+-- Read-only. Each field probe is pcall-wrapped against DF-version shape drift.
+function list_manager_orders(...)
+    local out = {}
+    local orders = try(function() return df.global.world.manager_orders.all end) or {}
+    for _, o in ipairs(orders) do
+        table.insert(out, {
+            id = try(function() return o.id end),
+            jobType = try(function() return enum_name(df.job_type, o.job_type) end),
+            jobTypeCode = try(function() return o.job_type end),
+            amountTotal = try(function() return o.amount_total end),
+            amountLeft = try(function() return o.amount_left end),
+            frequency = try(function()
+                local enum = df.manager_order.T_frequency
+                return enum and enum_name(enum, o.frequency) or tostring(o.frequency)
+            end),
+        })
+    end
+    return ok({ orders = out, total = #out })
 end
 
 return _ENV

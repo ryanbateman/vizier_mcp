@@ -32,10 +32,13 @@ const RUN_LUA_NOTE =
   "If the tool reports the script is missing, call jobs_setup_check for " +
   "install instructions.";
 
-const ACTION_NOTE =
-  " This is a reversible WRITE action (it flips a single job flag) and is " +
-  "only registered when VIZIER_ENABLE_ACTIONS=1. Wrapped in dfhack.with_suspend " +
+// Registration/safety note shared by every write tool.
+const GATE_NOTE =
+  " Registered only when VIZIER_ENABLE_ACTIONS=1; wrapped in dfhack.with_suspend " +
   "for a consistent game state.";
+
+// Adds the reversibility promise on top of GATE_NOTE for the flag-flip writes.
+const ACTION_NOTE = " This is a reversible WRITE action (it flips a single job flag)." + GATE_NOTE;
 
 /**
  * Map a thrown error from a jobs companion call to a tool result: surface a
@@ -126,6 +129,23 @@ export function registerJobTools(
     },
   );
 
+  server.tool(
+    "list_manager_orders",
+    "List the fortress work-order queue (df.global.world.manager_orders) — the " +
+      "standing \"make N of X\" production orders the manager hands out as jobs. " +
+      "Each order's job type, total/remaining amount, and frequency. Read-only." +
+      RUN_LUA_NOTE,
+    {},
+    async () => {
+      try {
+        const data = await callJobs<unknown>("list_manager_orders");
+        return jsonResult(data);
+      } catch (err) {
+        return jobsError(err);
+      }
+    },
+  );
+
   if (!options.actionsEnabled) return;
 
   server.tool(
@@ -175,6 +195,26 @@ export function registerJobTools(
           String(job_id),
           String(on ?? true),
         ]);
+        return jsonResult(data);
+      } catch (err) {
+        return jobsError(err);
+      }
+    },
+  );
+
+  server.tool(
+    "remove_job",
+    "Cancel a job and remove it from the queue (dfhack.job.removeJob). Find " +
+      "job ids via list_jobs. NOT reversible — the job is gone, though DF may " +
+      "re-post a recurring workshop/labor job on its own." +
+      GATE_NOTE +
+      RUN_LUA_NOTE,
+    {
+      job_id: z.number().int().describe("Job id (from list_jobs)"),
+    },
+    async ({ job_id }) => {
+      try {
+        const data = await callJobs<unknown>("remove_job", [String(job_id)]);
         return jsonResult(data);
       } catch (err) {
         return jobsError(err);

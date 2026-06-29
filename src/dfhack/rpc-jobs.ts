@@ -5,7 +5,7 @@
 import { callRpcModule } from "./rpc-module.js";
 
 export const JOBS_MODULE = "rpc.jobs";
-export const JOBS_SCHEMA = 1;
+export const JOBS_SCHEMA = 2;
 
 /** Thrown when the rpc.jobs companion can't be reached. */
 export class JobsScriptMissingError extends Error {

@@ -30,6 +30,8 @@ import { registerMortalityTool } from "./tools/mortality.js";
 import { registerItemCensusTool } from "./tools/item-census.js";
 import { registerLegendsTools } from "./tools/legends.js";
 import { registerJobTools } from "./tools/jobs.js";
+import { registerUnitActionTools } from "./tools/unit-actions.js";
+import { registerGameActionTools } from "./tools/game-actions.js";
 import { registerLuaTool } from "./tools/lua.js";
 import { disconnectClient } from "./dfhack/client.js";
 import { warmCache } from "./lookup-cache.js";
@@ -81,9 +83,13 @@ registerItemCensusTool(server);
 // entry point and must be reachable even when the companion script /
 // VIZIER_ENABLE_RUN_LUA aren't in place yet.
 registerLegendsTools(server);
-// Job tools follow the same discovery-first contract: jobs_setup_check +
-// list_jobs always register; the write tools only when VIZIER_ENABLE_ACTIONS=1.
-registerJobTools(server, { actionsEnabled: actionsEnabled() });
+// Action tool families follow the same discovery-first contract: the
+// *_setup_check + read tools always register; the write tools only when
+// VIZIER_ENABLE_ACTIONS=1.
+const ACTIONS_ENABLED = actionsEnabled();
+registerJobTools(server, { actionsEnabled: ACTIONS_ENABLED });
+registerUnitActionTools(server, { actionsEnabled: ACTIONS_ENABLED });
+registerGameActionTools(server, { actionsEnabled: ACTIONS_ENABLED });
 if (runLuaEnabled()) registerLuaTool(server);
 
 let shuttingDown = false;

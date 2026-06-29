@@ -57,20 +57,23 @@ Options:
   --dfhack=<path>  Path to the DFHack root (the directory containing
                    the 'hack/' subdirectory). On Steam, DFHack ships as
                    a separate steamapps/common/DFHack/ folder; on a
-                   manual install it lives inside the DF install dir.
-                   Auto-detected on Linux/macOS/Windows if omitted.
+                   classic/vanilla (non-Steam) install it lives inside the
+                   DF install dir. Auto-detected on Linux/macOS/Windows if
+                   omitted, or set the VIZIER_DFHACK_PATH env var to point at
+                   it once (handy for non-Steam layouts).
   --dry-run        Print the source + destination paths without writing.
   --force          Overwrite an existing legends.lua without prompting.
   --help, -h       Show this message.
 
-Auto-detection looks for 'hack/lua/' under each of:
+Auto-detection checks $VIZIER_DFHACK_PATH first, then looks for 'hack/lua/'
+under each of:
   Linux Steam:    ~/.local/share/Steam/steamapps/common/DFHack
                   ~/.local/share/Steam/steamapps/common/Dwarf Fortress
   macOS Steam:    ~/Library/Application Support/Steam/steamapps/common/DFHack
                   ~/Library/Application Support/Steam/steamapps/common/Dwarf Fortress
-  Windows Steam:  %PROGRAMFILES(X86)%/Steam/steamapps/common/DFHack
-                  %PROGRAMFILES(X86)%/Steam/steamapps/common/Dwarf Fortress
-                  and the same under D:/, E:/, F:/Steam and SteamLibrary
+  Windows Steam:  %PROGRAMFILES(X86)%/Steam/steamapps/common/{DFHack,Dwarf Fortress}
+                  and the same under C:/, D:/, E:/, F:/, G:/, H:/ Steam and SteamLibrary
+  Windows itch:   %LOCALAPPDATA%/itch/apps/dwarf-fortress (classic/vanilla)
 
 After install, restart DFHack (or run the following in the DFHack
 console:  :lua package.loaded['rpc.legends']=nil; require('rpc.legends'))
@@ -100,7 +103,7 @@ function steamCandidates(): string[] {
       const programFiles = process.env["PROGRAMFILES"];
       if (programFiles86) roots.push(join(programFiles86, "Steam"));
       if (programFiles) roots.push(join(programFiles, "Steam"));
-      for (const drive of ["D:", "E:", "F:"]) {
+      for (const drive of ["C:", "D:", "E:", "F:", "G:", "H:"]) {
         roots.push(join(drive, "Steam"));
         roots.push(join(drive, "SteamLibrary"));
       }
@@ -108,6 +111,12 @@ function steamCandidates(): string[] {
         for (const sub of subdirs) {
           candidates.push(join(root, "steamapps", "common", sub));
         }
+      }
+      // Non-Steam / classic: itch.io app install bundles DFHack inside the DF
+      // directory. Add its default location so vanilla installs auto-detect too.
+      const localAppData = process.env["LOCALAPPDATA"];
+      if (localAppData) {
+        candidates.push(join(localAppData, "itch", "apps", "dwarf-fortress"));
       }
       return candidates;
     }
@@ -120,6 +129,13 @@ function detectDfInstall(): string | null {
   // Anchor on hack/lua (always present in a DFHack install). hack/lua/rpc
   // may not exist yet on a fresh DFHack with no rpc.* modules installed —
   // install() creates it.
+  //
+  // VIZIER_DFHACK_PATH lets non-Steam / classic / unusual-layout users point
+  // at their install once (e.g. in the MCP server's env block) instead of
+  // passing --dfhack= each time. Honour it first.
+  const override = process.env["VIZIER_DFHACK_PATH"];
+  if (override && existsSync(join(override, "hack", "lua"))) return override;
+
   for (const candidate of steamCandidates()) {
     if (existsSync(join(candidate, "hack", "lua"))) return candidate;
   }
