@@ -29,6 +29,7 @@ import { registerMilitiaTool } from "./tools/militia.js";
 import { registerMortalityTool } from "./tools/mortality.js";
 import { registerItemCensusTool } from "./tools/item-census.js";
 import { registerLegendsTools } from "./tools/legends.js";
+import { registerJobTools } from "./tools/jobs.js";
 import { registerLuaTool } from "./tools/lua.js";
 import { disconnectClient } from "./dfhack/client.js";
 import { warmCache } from "./lookup-cache.js";
@@ -39,6 +40,15 @@ import { warmCache } from "./lookup-cache.js";
 // such modules: VIZIER_ENABLE_RUN_LUA=1 (also: true / yes).
 function runLuaEnabled(): boolean {
   return /^(1|true|yes)$/i.test(process.env.VIZIER_ENABLE_RUN_LUA ?? "");
+}
+
+// Job-management WRITE tools (set_job_priority, set_job_suspended) are opt-in
+// on top of the rpc.jobs companion: they mutate game state, so they only
+// register when VIZIER_ENABLE_ACTIONS=1 (also: true / yes). The read tool
+// (list_jobs) and the jobs_setup_check diagnostic register regardless, so the
+// companion can be discovered without unlocking writes.
+function actionsEnabled(): boolean {
+  return /^(1|true|yes)$/i.test(process.env.VIZIER_ENABLE_ACTIONS ?? "");
 }
 
 // Real version from package.json so the MCP handshake and startup log
@@ -71,6 +81,9 @@ registerItemCensusTool(server);
 // entry point and must be reachable even when the companion script /
 // VIZIER_ENABLE_RUN_LUA aren't in place yet.
 registerLegendsTools(server);
+// Job tools follow the same discovery-first contract: jobs_setup_check +
+// list_jobs always register; the write tools only when VIZIER_ENABLE_ACTIONS=1.
+registerJobTools(server, { actionsEnabled: actionsEnabled() });
 if (runLuaEnabled()) registerLuaTool(server);
 
 let shuttingDown = false;

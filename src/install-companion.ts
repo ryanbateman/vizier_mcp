@@ -15,6 +15,7 @@ import {
   mkdirSync,
   copyFileSync,
   statSync,
+  readdirSync,
 } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
@@ -62,7 +63,7 @@ Options:
   --force          Overwrite an existing legends.lua without prompting.
   --help, -h       Show this message.
 
-Auto-detection looks for 'hack/lua/rpc/' under each of:
+Auto-detection looks for 'hack/lua/' under each of:
   Linux Steam:    ~/.local/share/Steam/steamapps/common/DFHack
                   ~/.local/share/Steam/steamapps/common/Dwarf Fortress
   macOS Steam:    ~/Library/Application Support/Steam/steamapps/common/DFHack
@@ -116,48 +117,61 @@ function steamCandidates(): string[] {
 }
 
 function detectDfInstall(): string | null {
+  // Anchor on hack/lua (always present in a DFHack install). hack/lua/rpc
+  // may not exist yet on a fresh DFHack with no rpc.* modules installed —
+  // install() creates it.
   for (const candidate of steamCandidates()) {
-    if (existsSync(join(candidate, "hack", "lua", "rpc"))) return candidate;
+    if (existsSync(join(candidate, "hack", "lua"))) return candidate;
   }
   return null;
 }
 
-interface ResolvedPaths {
-  source: string;
-  destination: string;
+// Bundled companion dir: <package>/lua/rpc/. From build/install-companion.js
+// that's one directory up plus 'lua/rpc'. Same trick the VERSION read in
+// src/index.ts uses to find package.json.
+function bundledLuaDir(): string {
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
+  return resolve(moduleDir, "../lua/rpc");
 }
 
-function resolvePaths(df: string): ResolvedPaths {
-  // Bundled lua file: <package>/lua/rpc/legends.lua. From build/install-companion.js,
-  // that's one directory up plus 'lua/rpc/legends.lua'. Same trick the VERSION
-  // read in src/index.ts uses to find package.json.
-  const moduleDir = dirname(fileURLToPath(import.meta.url));
-  const source = resolve(moduleDir, "../lua/rpc/legends.lua");
-  const destination = resolve(df, "hack/lua/rpc/legends.lua");
-  return { source, destination };
+// Every *.lua file shipped in the bundled lua/rpc/ directory (legends.lua,
+// jobs.lua, and any future companion). Sorted for deterministic output.
+function bundledLuaFiles(): string[] {
+  const dir = bundledLuaDir();
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => f.endsWith(".lua"))
+    .sort();
 }
 
 function validateDfInstall(df: string): void {
   if (!existsSync(df)) {
     throw new Error(`DF install path does not exist: ${df}`);
   }
-  const luaRpc = join(df, "hack", "lua", "rpc");
-  if (!existsSync(luaRpc)) {
+  // hack/lua is the stable anchor; hack/lua/rpc is created on install if it
+  // doesn't exist yet (fresh DFHack with no rpc.* modules).
+  const luaDir = join(df, "hack", "lua");
+  if (!existsSync(luaDir)) {
     throw new Error(
       `not a DFHack-having install: ${df}\n` +
-        `  expected ${luaRpc} to exist. Confirm DFHack is installed at this path.`,
+        `  expected ${luaDir} to exist. Confirm DFHack is installed at this path.`,
     );
   }
-  const stats = statSync(luaRpc);
+  const stats = statSync(luaDir);
   if (!stats.isDirectory()) {
-    throw new Error(`${luaRpc} exists but is not a directory.`);
+    throw new Error(`${luaDir} exists but is not a directory.`);
   }
 }
 
-export interface InstallResult {
+export interface InstalledFile {
+  name: string;
   source: string;
   destination: string;
   overwrote: boolean;
+}
+
+export interface InstallResult {
+  files: InstalledFile[];
   dryRun: boolean;
 }
 
@@ -166,26 +180,40 @@ export function install(
   options: { dryRun?: boolean; force?: boolean } = {},
 ): InstallResult {
   validateDfInstall(df);
-  const { source, destination } = resolvePaths(df);
-  if (!existsSync(source)) {
+  const srcDir = bundledLuaDir();
+  const names = bundledLuaFiles();
+  if (names.length === 0) {
     throw new Error(
-      `bundled companion script not found at ${source}.\n` +
+      `no bundled companion scripts found under ${srcDir}.\n` +
         `  if you're running from source, this is expected — install via npm publish flow.`,
     );
   }
-  const overwrote = existsSync(destination);
-  if (overwrote && !options.force && !options.dryRun) {
+
+  const destDir = resolve(df, "hack/lua/rpc");
+  const files: InstalledFile[] = names.map((name) => ({
+    name,
+    source: join(srcDir, name),
+    destination: join(destDir, name),
+    overwrote: existsSync(join(destDir, name)),
+  }));
+
+  // Refuse the whole operation if any target exists and --force wasn't given,
+  // so a partial install can't leave a mix of old and new companions.
+  const existing = files.filter((f) => f.overwrote);
+  if (existing.length > 0 && !options.force && !options.dryRun) {
     throw new Error(
-      `${destination} already exists.\n` +
-        `  pass --force to overwrite, or remove the existing file manually.`,
+      `${existing.map((f) => f.destination).join(", ")} already exists.\n` +
+        `  pass --force to overwrite, or remove the existing file(s) manually.`,
     );
   }
+
   if (options.dryRun) {
-    return { source, destination, overwrote, dryRun: true };
+    return { files, dryRun: true };
   }
-  mkdirSync(dirname(destination), { recursive: true });
-  copyFileSync(source, destination);
-  return { source, destination, overwrote, dryRun: false };
+
+  mkdirSync(destDir, { recursive: true });
+  for (const f of files) copyFileSync(f.source, f.destination);
+  return { files, dryRun: false };
 }
 
 export async function run(argv: string[]): Promise<void> {
@@ -224,26 +252,27 @@ export async function run(argv: string[]): Promise<void> {
   try {
     const result = install(df, { dryRun: args.dryRun, force: args.force });
     if (result.dryRun) {
-      console.log(`[dry-run] would copy:`);
-      console.log(`  source:      ${result.source}`);
-      console.log(`  destination: ${result.destination}`);
-      console.log(
-        `  overwrite:   ${result.overwrote ? "yes (--force required for real run)" : "no"}`,
-      );
+      console.log(`[dry-run] would copy ${result.files.length} companion file(s):`);
+      for (const f of result.files) {
+        console.log(`  ${f.source}`);
+        console.log(`    -> ${f.destination}` + (f.overwrote ? " (exists; --force required)" : ""));
+      }
       return;
     }
+    for (const f of result.files) {
+      console.log(
+        `Installed ${f.destination}` + (f.overwrote ? " (overwrote existing)" : ""),
+      );
+    }
+    const modules = result.files.map((f) => `rpc.${f.name.replace(/\.lua$/, "")}`);
     console.log(
-      `Installed ${result.destination}` +
-        (result.overwrote ? " (overwrote existing)" : ""),
+      `Restart DFHack so the modules load, or in the DFHack console:`,
     );
+    for (const m of modules) {
+      console.log(`  :lua package.loaded['${m}']=nil; require('${m}')`);
+    }
     console.log(
-      `Restart DFHack so the module loads, or in the DFHack console:`,
-    );
-    console.log(
-      `  :lua package.loaded['rpc.legends']=nil; require('rpc.legends')`,
-    );
-    console.log(
-      `Then call legends_setup_check from your MCP client to confirm.`,
+      `Then call legends_setup_check / jobs_setup_check from your MCP client to confirm.`,
     );
   } catch (err) {
     console.error(

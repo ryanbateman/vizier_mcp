@@ -60,7 +60,7 @@ Triage with `list_units` (filter `alive` / `dead`), then `get_unit` each survivo
 
 `get_world_info` (save, civilisation, mode), `get_map_info` (dimensions, embark, z-levels), and `get_block_list` (terrain, tiles, and materials for any region) map your holdings. `get_reference_data` (`materials`, `plant_raws`, `building_defs`) tells you what you can dig, grow, brew, and build here.
 
-> Vizier reports only what DFHack will tell it. Current jobs, moods, stress, relationships and legends are not visible (see [the RunLua appendix](#appendix-why-runlua-is-blocked)). There is, of course, a good chance that the ~~AI~~ your trusted Vizier will lie and say that there is. Ahaha.
+> Vizier reports only what DFHack will tell it. Moods, stress and relationships are not visible over the base socket (see [the RunLua appendix](#appendix-why-runlua-is-blocked)); legends and the job queue are reachable through optional Lua companions ([Legends](#optional-legends-companion), [Jobs](#optional-jobs-management-companion)). There is, of course, a good chance that the ~~AI~~ your trusted Vizier will lie and say that there is. Ahaha.
 
 ## Quickstart
 
@@ -143,6 +143,12 @@ The CLI also accepts `--dry-run` to preview, `--force` to overwrite an existing 
 
 You also need `VIZIER_ENABLE_RUN_LUA=1` in the MCP server's environment — add it to the `env` block in your client config above. See [UNLOCKING-LEGENDS.md](UNLOCKING-LEGENDS.md) for the manual install path (used by non-npm consumers).
 
+### Optional: Jobs management companion
+
+The fortress **job queue** lives in `df.global.world.jobs.*` and, like legends, is not on the typed RFR socket — so the job tools (`jobs_setup_check`, `list_jobs`, and the opt-in writes `set_job_priority` / `set_job_suspended`) use a small DFHack-side Lua companion (`rpc.jobs`). The same `install-companion` CLI installs it alongside legends (it copies every bundled `lua/rpc/*.lua`), and it needs the same `VIZIER_ENABLE_RUN_LUA=1`. Call `jobs_setup_check` to confirm.
+
+`list_jobs` is read-only. The two **write** tools — `set_job_priority` (toggles a job's `do_now` flag, the same boost DFHack's `do-job-now` / `prioritize` use) and `set_job_suspended` (toggles `suspend`) — are reversible single-flag flips, each wrapped in `dfhack.with_suspend` for a consistent game state. They follow Vizier's read-only-by-default ethos: they register **only** when you additionally set `VIZIER_ENABLE_ACTIONS=1`. With just `VIZIER_ENABLE_RUN_LUA=1` you get `list_jobs` (read) but no writes.
+
 ## Tool Reference
 
 Tools fall into two groups. **Base tools** wrap a single DFHack RPC (Core API or RFR) and return its data with names resolved server-side — the primitives. **Composite narrative tools** compose those primitives, apply projection and aggregation, and answer a specific [Uses](#uses) question in one call. Reach for a composite tool when a question is in the Uses list; reach for the base tools when you need to drill in.
@@ -161,6 +167,17 @@ Tools fall into two groups. **Base tools** wrap a single DFHack RPC (Core API or
 | `list_units` | Units with filters and data mask | `scan_all`, `race`, `civ_id`, `name`, `mask`, `include_inventory`, `offset`, `limit` |
 | `list_squads` | Military squads and members | — |
 | `set_unit_labors` | Enable/disable labors per unit | `changes[]` |
+
+### Jobs companion tools (`rpc.jobs`)
+
+Require the [jobs companion](#optional-jobs-management-companion) + `VIZIER_ENABLE_RUN_LUA=1`. The `set_job_*` writes additionally require `VIZIER_ENABLE_ACTIONS=1`.
+
+| Tool | Description | Key Parameters |
+|------|-------------|---------------|
+| `jobs_setup_check` | Probe whether the `rpc.jobs` companion is installed/reachable | — |
+| `list_jobs` | Fortress job queue: type, worker, building, position, `do_now`/`suspend` flags (read-only) | `include_special` |
+| `set_job_priority` | Toggle a job's `do_now` flag (prioritise/clear) — reversible write | `job_id`, `on` |
+| `set_job_suspended` | Toggle a job's `suspend` flag (suspend/resume) — reversible write | `job_id`, `on` |
 
 ### RemoteFortressReader (RFR) tools
 
@@ -317,7 +334,8 @@ Because of the above, the `run_lua` tool is **disabled by default** — exposing
 | `DFHACK_HOST` | `127.0.0.1` | DFHack remote server host |
 | `DFHACK_PORT` | `5000` | DFHack remote server port |
 | `DFHACK_RPC_TIMEOUT_MS` | `60000` | Per-RPC timeout. Raise it for very large fortresses (a slow `get_unit_list`/`get_block_list` can legitimately take a while); on timeout the connection is reset and the next call reconnects. |
-| `VIZIER_ENABLE_RUN_LUA` | _(unset)_ | Set to `1`/`true`/`yes` to register the `run_lua` tool. Disabled by default — only useful with user-authored `rpc.*` DFHack modules (see appendix). |
+| `VIZIER_ENABLE_RUN_LUA` | _(unset)_ | Set to `1`/`true`/`yes` to register the `run_lua` tool and enable the Lua-companion tool families (legends, jobs). Disabled by default — only useful with `rpc.*` DFHack modules (see appendix). |
+| `VIZIER_ENABLE_ACTIONS` | _(unset)_ | Set to `1`/`true`/`yes` to register the opt-in **write** actions (`set_job_priority`, `set_job_suspended`). Disabled by default; read tools are unaffected. Also requires `VIZIER_ENABLE_RUN_LUA=1`. |
 
 ## Troubleshooting
 
