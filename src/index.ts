@@ -32,6 +32,8 @@ import { registerLegendsTools } from "./tools/legends.js";
 import { registerJobTools } from "./tools/jobs.js";
 import { registerUnitActionTools } from "./tools/unit-actions.js";
 import { registerGameActionTools } from "./tools/game-actions.js";
+import { registerSurveyTools } from "./tools/survey.js";
+import { registerDigTools } from "./tools/dig.js";
 import { registerLuaTool } from "./tools/lua.js";
 import { disconnectClient } from "./dfhack/client.js";
 import { warmCache } from "./lookup-cache.js";
@@ -90,6 +92,10 @@ const ACTIONS_ENABLED = actionsEnabled();
 registerJobTools(server, { actionsEnabled: ACTIONS_ENABLED });
 registerUnitActionTools(server, { actionsEnabled: ACTIONS_ENABLED });
 registerGameActionTools(server, { actionsEnabled: ACTIONS_ENABLED });
+// Survey (terrain/room discovery) is read-only and always registers; dig
+// designation is a gated write.
+registerSurveyTools(server);
+registerDigTools(server, { actionsEnabled: ACTIONS_ENABLED });
 if (runLuaEnabled()) registerLuaTool(server);
 
 let shuttingDown = false;

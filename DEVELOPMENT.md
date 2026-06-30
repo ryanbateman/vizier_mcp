@@ -46,3 +46,15 @@ provenance**.
 
 You can dry-run the whole pipeline without releasing via the workflow's
 **Run workflow** button (`workflow_dispatch`, `dry_run: true`).
+
+## Reading the map (GetBlockList gotchas)
+
+`GetBlockList` underpins the survey/dig tools and has two sharp edges:
+- **Coordinates:** `min/max X,Y` are **block** coords (each block = 16×16 tiles), `Z` is a
+  z-level, and **max is EXCLUSIVE on every axis**. To cover a tile box inclusively, convert to
+  blocks and add +1 to each max (see `blockRange` in `src/tools/survey.ts` / `dig.ts`).
+- **Change-driven:** it returns only blocks that changed since the last call on the connection,
+  so a second read of the same region comes back partial/empty. Call `ResetMapHashes` first when
+  you need the full current state (the survey/dig tools do).
+
+Wide sweeps can crash DFHack — always go through `checkBlockVolume` (`src/block-volume.js`).

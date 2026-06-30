@@ -197,6 +197,17 @@ Require the [unit-action companion](#optional-jobs-management-companion) + `VIZI
 | `set_unit_custom_profession` | Set/clear a unit's custom profession label — reversible write | `unit_id`, `profession` |
 | `teleport_unit` | Relocate a unit to a map coordinate — write | `unit_id`, `x`, `y`, `z` |
 
+### Survey & dig tools
+
+Terrain/room **discovery** reads (no companion — pure RFR `GetBlockList`) plus **dig designation** (native `SendDigCommand`). All take TILE coordinates and are bounded by `VIZIER_MAX_BLOCK_VOLUME`.
+
+| Tool | Description | Key Parameters |
+|------|-------------|---------------|
+| `survey_dig_site` | Per-z summary of a region: diggable rock walls, open space, hidden tiles, named **ore/mineral veins**, **hazards** (aquifer/magma/water), and existing dig designations. The "find the mountain / where's the ore / is it safe" tool (read) | `minX..maxZ` (tiles) |
+| `list_buildings` | Buildings & defined rooms in a region: type, position/extent, `is_room` + room rect, item count (read) | `minX..maxZ` (tiles) |
+| `dig_area` | Designate a box of tiles to mine/channel/stair/ramp — **write** (`VIZIER_ENABLE_ACTIONS`). Refuses tiles on/next to aquifer/magma/water unless `force:true` | `minX..maxZ`, `mode`, `force` |
+| `dig_tiles` | Same as `dig_area` for an explicit tile list (irregular shapes) — **write** | `tiles[]`, `mode`, `force` |
+
 ### RemoteFortressReader (RFR) tools
 
 | Tool | Description | Key Parameters |
