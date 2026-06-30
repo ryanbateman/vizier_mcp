@@ -23,7 +23,9 @@ describe("install-companion install()", () => {
     const result = install(df, { dryRun: true });
     expect(result.dryRun).toBe(true);
     expect(result.destination).toBe(join(df, "hack/lua/rpc/legends.lua"));
-    expect(result.source).toMatch(/lua\/rpc\/legends\.lua$/);
+    // Cross-platform: compare path tails with the OS separator, not a
+    // hard-coded forward slash (this assertion failed on Windows).
+    expect(result.source.endsWith(join("lua", "rpc", "legends.lua"))).toBe(true);
     expect(existsSync(result.destination)).toBe(false);
   });
 
