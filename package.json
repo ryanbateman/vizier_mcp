@@ -46,14 +46,14 @@
     "npm": ">=11.5.1"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.29.0",
-    "protobufjs": "8.4.2",
-    "zod": "4.4.3"
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "protobufjs": "8.8.0",
+    "zod": "4.5.2"
   },
   "devDependencies": {
     "@types/node": "25.9.1",
-    "@vitest/coverage-v8": "4.1.7",
+    "@vitest/coverage-v8": "4.1.11",
     "typescript": "6.0.3",
-    "vitest": "4.1.7"
+    "vitest": "4.1.11"
   }
 }
